@@ -9,10 +9,10 @@ from telegram.ext._handlers.messagehandler import MessageHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
 from shared import GuessThePlayer, Wilty, games, Draft, remove_jobs
 
-def format_teams(teams:list[tuple[telegram.User, dict[str, str]]]):
+def format_teams(teams:list[tuple[telegram.User, dict[str, str]]], formations:dict[str, str]):
     text = ""
     for player, team in teams:
-        players_list = [f"{pos}:{name}\n" for pos, name in team.items()]
+        players_list = [f"{formations[pos]}:{name}\n" for pos, name in team.items()]
         players_list = "".join(players_list)
         text += f"{player.mention_html()}\n{players_list}"
     return text
@@ -255,7 +255,7 @@ async def handle_draft_add_pos(update: telegram.Update, context: telegram.ext.Co
         context.job_queue.run_repeating(handle_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id, name="draft_reapting_votes_job")
         context.job_queue.run_once(handle_draft_set_votes_job, when=30, data=data, chat_id=update.effective_chat.id, name="draft_set_votes_job")
         teams = [(player[0], player[1]) for player in game.players.values()]
-        teams = format_teams(teams)
+        teams = format_teams(teams, game.formation[1])
         await context.bot.send_message(text=f"the teams\n{teams}", chat_id=update.effective_chat.id, parse_mode=telegram.constants.ParseMode.HTML)
         await context.bot.send_message(text="the drafting has ended discuss the teams for 3 minutes then vote for the best", chat_id=update.effective_chat.id)
         return
@@ -300,7 +300,8 @@ async def handle_draft_set_votes_job(context: telegram.ext.ContextTypes.DEFAULT_
 
     poll_data["message_id"] = message.message_id
     context.bot_data[f"poll_{message.poll.id}"] = poll_data
-    context.bot_data[f"poll_{telegram.Update.effective_chat.id}"] = poll_data
+    context.bot_data[f"poll_{chat_id}"] = poll_data
+    print(context.bot_data)
     data = {"game_id":chat_id, "time":datetime.now(), "poll_id":message.poll.id}
     context.job_queue.run_repeating(handle_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id, name="draft_reapting_votes_end_job")
     context.job_queue.run_once(handle_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,name="draft_end_votes_job")
@@ -355,6 +356,35 @@ async def handle_draft_vote_recive(update: telegram.Update, context: telegram.ex
         context.job_queue.run_once(handle_draft_end_game_job, when=0, data=data, chat_id=chat_id ,name="draft_end_game_job")
     
 
+async def handle_draft_start_votes_command(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue:
+        return
+    
+    chat_id = update.effective_chat.id
+    game:Draft | GuessThePlayer | Wilty | None = games.get(chat_id, None)
+    if not game or not isinstance(game, Draft) or game.state != 3:
+        return
+
+    print("found game")
+    poll_data = {
+        "chat_id":chat_id,
+        "questions":[player[0].full_name for player in game.players.values()],
+        "votes_count":{player[0].full_name:0 for player in game.players.values()},
+        "answers":0
+    }
+    message = await context.bot.send_poll(question="you has the best team" ,options=poll_data["questions"], chat_id=chat_id,
+                                is_anonymous=False, allows_multiple_answers=False)
+
+    poll_data["message_id"] = message.message_id
+    context.bot_data[f"poll_{message.poll.id}"] = poll_data
+    context.bot_data[f"poll_{chat_id}"] = poll_data
+    data = {"game_id":chat_id, "time":datetime.now(), "poll_id":message.poll.id}
+
+    remove_jobs("draft_reapting_votes_job", context)
+    remove_jobs("draft_reapting_votes_end_job", context)
+    
+    context.job_queue.run_once(handle_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,name="draft_end_votes_job")
+
 async def handle_draft_end_votes_command(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue:
         return
@@ -366,6 +396,7 @@ async def handle_draft_end_votes_command(update: telegram.Update, context: teleg
     remove_jobs("draft_reapting_votes_job", context)
     remove_jobs("draft_reapting_votes_end_job", context)
     
+    print(context.bot_data)
     poll_data = context.bot_data[f"poll_{update.effective_chat.id}"]
     chat_id = poll_data["chat_id"]
 
@@ -428,7 +459,7 @@ async def handle_draft_end_game_job(context: telegram.ext.ContextTypes.DEFAULT_T
     for winner in winners:
         winners_text += f"{winner[0].mention_html()}\n"
         teams.append((winner[0], winner[1]))
-    teams = format_teams(teams)
+    teams = format_teams(teams, game.formation[1])
     await context.bot.send_message(text=f"the winners are {winners_text}\n the teams\n{teams}", chat_id=context.job.chat_id, parse_mode=telegram.constants.ParseMode.HTML)
 
 async def handle_draft_cancel_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
@@ -459,6 +490,7 @@ start_draft_game_command_handler = CommandHandler("start_draft", handle_draft_st
 set_draft_game_state_command_handler = CommandHandler("set_draft_state", handle_draft_set_state_command)
 cancel_draft_game_command_handler = CommandHandler("cancel_draft", handle_draft_cancel_game)
 end_vote_draft_game_command_handler = CommandHandler("draft_end_vote", handle_draft_end_votes_command)
+start_vote_draft_game_command_handler = CommandHandler("draft_start_vote", handle_draft_start_votes_command)
 position_draft_message_handler = MessageHandler((telegram.ext.filters.TEXT & ~telegram.ext.filters.COMMAND), handle_draft_add_pos)
 vote_recive_poll_answer_handler = PollAnswerHandler(handle_draft_vote_recive)
 join_draft_game_callback_handler = CallbackQueryHandler(callback=handle_draft_join_callback, pattern="^draft_join$")

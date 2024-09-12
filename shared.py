@@ -461,7 +461,8 @@ class GuessThePlayer:
             self.muted_players.append(player.id)
 
         print(answer.strip().lower(), self.curr_answer, jaro_winkler_similarity(answer.strip().lower(), self.curr_answer))
-        if jaro_winkler_similarity(answer.strip().lower(), self.curr_answer) > 0.85:
+        score = jaro_winkler_similarity(answer.strip().lower(), self.curr_answer)
+        if (len(answer.lower().strip()) > 10 and score > 0.85) or (len(answer.lower().strip()) <= 10 and score > 0.92):
             self.state = 3
             self.winner_id = player.id
             return True, "correct"
