@@ -1,9 +1,7 @@
-from enum import Enum
-import re
 from typing import Optional, Union
 import telegram
 import telegram.ext
-from typing import Literal
+from typing import Literal, List, Tuple
 from random import shuffle, randint
 
 def remove_jobs(name:str, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
@@ -41,8 +39,8 @@ class Draft():
         self.num_players = 0
         self.category = ""
         self.formation = ["", {}]
-        self.teams = []
-        self.picked_teams = []
+        self.teams = None
+        self.picked_teams = None
         self.players_ids = []
         self.start_player_idx = -1
         self.curr_player_idx = -1
@@ -66,17 +64,18 @@ class Draft():
         if self.state != 0 or self.num_players < 2:
             return False
 
+        self.teams = [""] * (11 + self.num_players)
+        self.picked_teams = [False] * len(self.teams)
         self.state = 1
         return True
 
     def set_game_states(self, category:str, teams:list[str], formation:str) -> tuple[bool, Literal["game error", "no category error", "num of teams error", "formation error", "duplicate teams error", ""]]:
-        if self.state != 1 :
+        if self.state != 1 or self.teams == None:
             return False, "game error"
         if not category:
             return False, "no category error"
         if len(teams) != (11 + self.num_players):
             return False, "num of teams error"
-        print(formation)
         formation_ = FORMATIONS.get(formation, None)
         if formation_ == None:
             return False, "formation error"
@@ -86,8 +85,10 @@ class Draft():
 
         self.formation[0] = formation
         self.formation[1] = formation_
-        self.teams = [team.strip() for team in teams]
-        self.picked_teams = [False] * len(teams)
+
+        for i in range(len(teams)):
+            self.teams[i] = teams[i].strip()
+
         self.category = category
         self.start_player_idx = 0
         self.curr_player_idx = 0
@@ -96,8 +97,8 @@ class Draft():
 
         return True, ""
 
-    def add_pos_to_team(self, player:telegram.User, added_player:str) -> tuple[bool, Literal["game_error", "curr_player_error", "picked_team_error", "picked_pos_error", "new_pos", "same_pos", "end_game"]]:
-        if self.state != 2 or (not player.id in self.players):
+    def add_pos_to_team(self, player:telegram.User, added_player:str) -> tuple[bool, Literal["game_error", "curr_player_error", "picked_team_error", "picked_pos_error", "taken_player_error", "new_pos", "same_pos", "end_game"]]:
+        if self.state != 2 or (not player.id in self.players) or self.picked_teams == None:
             return False, "game_error"
 
         if self.players_ids[self.curr_player_idx] != player.id:
@@ -109,6 +110,13 @@ class Draft():
         player_ = self.players[player.id]
         if player_[1][self.curr_pos] != None:
             return False, "picked_pos_error"
+
+        if added_player.lower() in [
+            value
+            for player in self.players.values() 
+            for value in player[1].values()
+        ]:
+            return False, "taken_player_error"
 
         player_[1][self.curr_pos] = added_player.lower()
         if self.curr_player_idx == (self.start_player_idx + self.num_players - 1) % self.num_players:
@@ -125,7 +133,7 @@ class Draft():
         return True, "same_pos"
 
     def rand_team(self, player_id):
-        if self.state != 2:
+        if self.state != 2 or self.picked_teams == None or self.teams == None:
             return ""
 
         if player_id != self.players_ids[self.start_player_idx]:
@@ -513,4 +521,76 @@ class GuessThePlayer:
         self.winner_id = -1
         return scores, winners
 
+
 games:dict[int, Optional[Union[GuessThePlayer, Draft, Wilty]]] = {}
+
+
+def jaro_winkler_similarity(s1: str, s2: str) -> float:
+    def jaro(s1: str, s2: str) -> float:
+        if s1 == s2:
+            return 1.0
+        len_s1, len_s2 = len(s1), len(s2)
+        if len_s1 == 0 or len_s2 == 0:
+            return 0.0
+
+        match_distance = int(max(len_s1, len_s2) / 2) - 1
+        matches = 0
+        transpositions = 0
+        s1_matches = [False] * len_s1
+        s2_matches = [False] * len_s2
+
+        for i in range(len_s1):
+            start = max(0, i - match_distance)
+            end = min(i + match_distance + 1, len_s2)
+            for j in range(start, end):
+                if s2_matches[j]:
+                    continue
+                if s1[i] != s2[j]:
+                    continue
+                s1_matches[i] = True
+                s2_matches[j] = True
+                matches += 1
+                break
+
+        if matches == 0:
+            return 0.0
+
+        k = 0
+        for i in range(len_s1):
+            if s1_matches[i]:
+                while not s2_matches[k]:
+                    k += 1
+                if s1[i] != s2[k]:
+                    transpositions += 1
+                k += 1
+        transpositions //= 2
+
+        jaro_score = (matches / len_s1 + matches / len_s2 + (matches - transpositions) / matches) / 3.0
+        return jaro_score
+
+    jaro_score = jaro(s1, s2)
+    prefix_length = 0
+    max_prefix_length = 4
+
+    for i in range(min(len(s1), len(s2), max_prefix_length)):
+        if s1[i] != s2[i]:
+            break
+        prefix_length += 1
+
+    return jaro_score + (prefix_length * 0.1 * (1 - jaro_score))
+
+def token_overlap(s1: str, s2: str, threshold: float = 0.3) -> bool:
+    tokens1 = set(s1.lower().split())
+    tokens2 = set(s2.lower().split())
+    intersection = len(tokens1.intersection(tokens2))
+    union = len(tokens1.union(tokens2))
+    return (intersection / union) > threshold
+
+def compute_similarity(query: str, candidates: List[str]) -> List[Tuple[str, float]]:
+    results = []
+    for candidate in candidates:
+        if candidate != None and token_overlap(query, candidate):
+            similarity = jaro_winkler_similarity(query, candidate)
+            results.append((candidate, similarity))
+    return results
+

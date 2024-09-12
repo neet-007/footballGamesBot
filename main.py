@@ -3,7 +3,7 @@ from os import getenv
 import telegram
 import telegram.ext
 from telegram.ext._handlers.messagehandler import MessageHandler
-from draft import handle_draft_add_pos, start_draft_game_command_handler,  new_draft_game_command_handler, join_draft_game_command_handler, set_draft_game_state_command_handler, cancel_draft_game_command_handler, vote_recive_poll_answer_handler, position_draft_message_handler, join_draft_game_callback_handler, random_team_draft_game_callback_handler
+from draft import handle_draft_add_pos, start_draft_game_command_handler,  new_draft_game_command_handler, join_draft_game_command_handler, set_draft_game_state_command_handler, cancel_draft_game_command_handler, vote_recive_poll_answer_handler, position_draft_message_handler, join_draft_game_callback_handler, random_team_draft_game_callback_handler, end_vote_draft_game_command_handler
 from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_answer_question_command_handler, guess_the_player_proccess_answer_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_start_round_command_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_guess_the_player_answer_question_command, handle_guess_the_player_ask_question_command, handle_guess_the_player_proccess_answer_command, handle_guess_the_player_start_round
 from shared import Draft, GuessThePlayer, Wilty, games
 
@@ -26,9 +26,13 @@ async def handle_dispatch_messages(update: telegram.Update, context: telegram.ex
     print("if passed")
     chat_id = update.effective_chat.id
     if update.effective_chat.type == "private":
-        chat_id = context.bot_data.get(update.effective_user.id, None)
-        if chat_id == None:
+        chat_id_list = context.bot_data.get(update.effective_user.id, None)
+        print("chat list found", chat_id_list)
+        if chat_id_list == None or len(chat_id_list) == 0:
             return
+
+        print("chat list found", chat_id_list)
+        chat_id = chat_id_list[0]
     game = games.get(chat_id, None)
     if game == None:
         return
@@ -80,6 +84,7 @@ def main():
     application.add_handler(set_draft_game_state_command_handler)
     application.add_handler(random_team_draft_game_callback_handler)
     application.add_handler(cancel_draft_game_command_handler)
+    application.add_handler(end_vote_draft_game_command_handler)
     application.add_handler(vote_recive_poll_answer_handler)
     
     application.add_handler(MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_dispatch_messages))

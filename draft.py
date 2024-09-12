@@ -237,6 +237,8 @@ async def handle_draft_add_pos(update: telegram.Update, context: telegram.ext.Co
             return
         elif status == "picked_team_error":
             return await update.message.reply_text("this team has already passed")
+        elif status == "taken_player_error":
+            return await update.message.reply_text("this player is taken")
         else:
             del games[update.effective_chat.id]
             return await update.message.reply_text("an error happend game aported")
@@ -298,6 +300,7 @@ async def handle_draft_set_votes_job(context: telegram.ext.ContextTypes.DEFAULT_
 
     poll_data["message_id"] = message.message_id
     context.bot_data[f"poll_{message.poll.id}"] = poll_data
+    context.bot_data[f"poll_{telegram.Update.effective_chat.id}"] = poll_data
     data = {"game_id":chat_id, "time":datetime.now(), "poll_id":message.poll.id}
     context.job_queue.run_repeating(handle_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id, name="draft_reapting_votes_end_job")
     context.job_queue.run_once(handle_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,name="draft_end_votes_job")
@@ -352,11 +355,32 @@ async def handle_draft_vote_recive(update: telegram.Update, context: telegram.ex
         context.job_queue.run_once(handle_draft_end_game_job, when=0, data=data, chat_id=chat_id ,name="draft_end_game_job")
     
 
+async def handle_draft_end_votes_command(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue:
+        return
+    
+    game:Draft | GuessThePlayer | Wilty | None = games.get(update.effective_chat.id, None)
+    if not game or not isinstance(game, Draft):
+        return
+
+    remove_jobs("draft_reapting_votes_job", context)
+    remove_jobs("draft_reapting_votes_end_job", context)
+    
+    poll_data = context.bot_data[f"poll_{update.effective_chat.id}"]
+    chat_id = poll_data["chat_id"]
+
+    votes = poll_data["votes_count"]
+    del context.bot_data[f"poll_{update.effective_chat.id}"]
+    await context.bot.stop_poll(chat_id=chat_id, message_id=poll_data["message_id"])
+    data = {"game_id":chat_id, "time":datetime.now(), "votes":votes}
+    context.job_queue.run_once(handle_draft_end_game_job, when=0, data=data, chat_id=chat_id ,name="draft_end_game_job")
+
 async def handle_draft_end_votes_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
     remove_jobs("draft_reapting_votes_job", context)
+    remove_jobs("draft_reapting_votes_end_job", context)
     chat_id = context.job.data["game_id"]
     game:Draft | GuessThePlayer | Wilty | None = games.get(chat_id, None)
     if not game or not isinstance(game, Draft):
@@ -381,6 +405,7 @@ async def handle_draft_end_game_job(context: telegram.ext.ContextTypes.DEFAULT_T
 
     print("if passed")
     remove_jobs("draft_reapting_votes_job", context)
+    remove_jobs("draft_reapting_votes_end_job", context)
     chat_id = context.job.data["game_id"]
     game:Draft | GuessThePlayer | Wilty | None = games.get(chat_id, None)
     if game == None or not isinstance(game, Draft) or game.state != 3:
@@ -433,6 +458,7 @@ join_draft_game_command_handler = CommandHandler("draft_join", handle_draft_join
 start_draft_game_command_handler = CommandHandler("start_draft", handle_draft_start_game_command)
 set_draft_game_state_command_handler = CommandHandler("set_draft_state", handle_draft_set_state_command)
 cancel_draft_game_command_handler = CommandHandler("cancel_draft", handle_draft_cancel_game)
+end_vote_draft_game_command_handler = CommandHandler("draft_end_vote", handle_draft_end_votes_command)
 position_draft_message_handler = MessageHandler((telegram.ext.filters.TEXT & ~telegram.ext.filters.COMMAND), handle_draft_add_pos)
 vote_recive_poll_answer_handler = PollAnswerHandler(handle_draft_vote_recive)
 join_draft_game_callback_handler = CallbackQueryHandler(callback=handle_draft_join_callback, pattern="^draft_join$")
