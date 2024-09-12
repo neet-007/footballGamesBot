@@ -1,7 +1,7 @@
 from typing import Optional, Union
 import telegram
 import telegram.ext
-from typing import Literal, List, Tuple
+from typing import Literal 
 from random import shuffle, randint
 
 def remove_jobs(name:str, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
@@ -460,7 +460,8 @@ class GuessThePlayer:
         if player_[2] == 0:
             self.muted_players.append(player.id)
 
-        if answer.strip().lower() == self.curr_answer:
+        print(answer.strip().lower(), self.curr_answer, jaro_winkler_similarity(answer.strip().lower(), self.curr_answer))
+        if jaro_winkler_similarity(answer.strip().lower(), self.curr_answer) > 0.85:
             self.state = 3
             self.winner_id = player.id
             return True, "correct"
@@ -578,19 +579,4 @@ def jaro_winkler_similarity(s1: str, s2: str) -> float:
         prefix_length += 1
 
     return jaro_score + (prefix_length * 0.1 * (1 - jaro_score))
-
-def token_overlap(s1: str, s2: str, threshold: float = 0.3) -> bool:
-    tokens1 = set(s1.lower().split())
-    tokens2 = set(s2.lower().split())
-    intersection = len(tokens1.intersection(tokens2))
-    union = len(tokens1.union(tokens2))
-    return (intersection / union) > threshold
-
-def compute_similarity(query: str, candidates: List[str]) -> List[Tuple[str, float]]:
-    results = []
-    for candidate in candidates:
-        if candidate != None and token_overlap(query, candidate):
-            similarity = jaro_winkler_similarity(query, candidate)
-            results.append((candidate, similarity))
-    return results
 
