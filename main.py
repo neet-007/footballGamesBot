@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import telegram
 import telegram.ext
 from telegram.ext._handlers.messagehandler import MessageHandler
-from db.models import Foo
+from db.models import Base, Foo
 from draft import handle_draft_add_pos, start_draft_game_command_handler,  new_draft_game_command_handler, join_draft_game_command_handler, set_draft_game_state_command_handler, cancel_draft_game_command_handler, vote_recive_poll_answer_handler, position_draft_message_handler, join_draft_game_callback_handler, random_team_draft_game_callback_handler, end_vote_draft_game_command_handler, start_vote_draft_game_command_handler
 from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_answer_question_command_handler, guess_the_player_proccess_answer_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_start_round_command_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_guess_the_player_answer_question_command, handle_guess_the_player_ask_question_command, handle_guess_the_player_proccess_answer_command, handle_guess_the_player_start_round
 from shared import Draft, GuessThePlayer, Wilty, games
@@ -20,10 +20,10 @@ if not BOT_API_TOKEN:
 
 WEBHOOK_URL = getenv("WEBHOOK_URL")
 TURSO_DATABASE_URL = getenv("TURSO_DATABASE_URL", "http://127.0.0.1:8080") 
-dbUrl = f"sqlite+{TURSO_DATABASE_URL}"
-
 print("db url: ", TURSO_DATABASE_URL)
-engine = create_engine(f"sqlite:///{TURSO_DATABASE_URL}/", connect_args={'check_same_thread': False}, echo=True)
+
+
+engine = create_engine("sqlite+libsql" + TURSO_DATABASE_URL, connect_args={'check_same_thread': False}, echo=True)
 
 ptb = (
     telegram.ext.Application.builder()
@@ -65,6 +65,8 @@ def home():
 
     for item in session.scalars(stmt):
         print(item)
+
+    session.close()
 
 async def handle_start(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not update.message or context == None:
