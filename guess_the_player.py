@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import telegram
 from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram._inline.inlinekeyboardmarkup import InlineKeyboardMarkup
@@ -55,7 +55,10 @@ async def handle_guess_the_player_reapting_join_job(context: telegram.ext.Contex
     if not isinstance(game, GuessThePlayer):
         return await context.bot.send_message(text="there is a game of differant type running", chat_id=context.job.chat_id)
 
-    await context.bot.send_message(chat_id=context.job.chat_id, text=f"reaming time to join {round((context.job.data['time'] - datetime.now()).seconds)}")
+    await context.bot.send_message(
+        chat_id=context.job.chat_id, 
+        text=f"Remaining time to join: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+    )
 
 async def handle_guess_the_player_join_game_callback(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not update.callback_query or not update.effective_chat or not update.effective_user:

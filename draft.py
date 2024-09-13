@@ -2,7 +2,7 @@ import telegram
 from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram._inline.inlinekeyboardmarkup import InlineKeyboardMarkup
 import telegram.ext
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
@@ -42,7 +42,10 @@ async def handle_draft_reapting_join_job(context: telegram.ext.ContextTypes.DEFA
     if not game or not isinstance(game, Draft) or game.state!= 0:
         return
 
-    await context.bot.send_message(chat_id=context.job.chat_id, text=f"to join the game send /draft_join\n reaming time {round((context.job.data['time'] - datetime.now()).seconds)}")
+    await context.bot.send_message(
+        chat_id=context.job.chat_id, 
+        text=f"Remaining time to join\n use /join_draft to join the game\n or /start_draft to start game: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+    )
 
 async def handle_draft_start_game_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
@@ -137,7 +140,10 @@ async def handle_draft_reapting_statement_job(context: telegram.ext.ContextTypes
         return
 
     print("found game")
-    await context.bot.send_message(chat_id=context.job.chat_id, text=f"reaming time to decide statements {round((context.job.data['time'] - datetime.now()).seconds)}")
+    await context.bot.send_message(
+        chat_id=context.job.chat_id, 
+        text=f"Remaining time to decide statements: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+    )
 
 async def handle_draft_set_state_command_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     print("set state jon")
@@ -274,7 +280,10 @@ async def handle_draft_reapting_votes_job(context: telegram.ext.ContextTypes.DEF
         return
 
     print("found game")
-    await context.bot.send_message(chat_id=context.job.chat_id, text=f"reaming time to decide votings {round((context.job.data['time'] - datetime.now()).seconds)}")
+    await context.bot.send_message(
+        chat_id=context.job.chat_id, 
+        text=f"Remaining time to decide: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+    )
 
 async def handle_draft_set_votes_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     print("set votes")
@@ -314,7 +323,10 @@ async def handle_draft_reapting_votes_end_job(context: telegram.ext.ContextTypes
     if not game or not isinstance(game, Draft) or game.state != 3:
         return
 
-    await context.bot.send_message(chat_id=context.job.chat_id, text=f"reaming time to vote {round((context.job.data['time'] - datetime.now()).seconds)}")
+    await context.bot.send_message(
+        chat_id=context.job.chat_id, 
+        text=f"Remaining time to vote: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+    )
 
 async def handle_draft_vote_recive(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     print("recive vote")
