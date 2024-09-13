@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import telegram
 import telegram.ext
 from telegram.ext._handlers.messagehandler import MessageHandler
-from db.models import Base, Foo
+from db.models import Base, Foo, Formation, Draft as d
 from draft import handle_draft_add_pos, start_draft_game_command_handler,  new_draft_game_command_handler, join_draft_game_command_handler, set_draft_game_state_command_handler, cancel_draft_game_command_handler, vote_recive_poll_answer_handler, position_draft_message_handler, join_draft_game_callback_handler, random_team_draft_game_callback_handler, end_vote_draft_game_command_handler, start_vote_draft_game_command_handler
 from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_answer_question_command_handler, guess_the_player_proccess_answer_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_start_round_command_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_guess_the_player_answer_question_command, handle_guess_the_player_ask_question_command, handle_guess_the_player_proccess_answer_command, handle_guess_the_player_start_round
 from shared import Draft, GuessThePlayer, Wilty, games
@@ -58,15 +58,27 @@ async def process_update(request: Request):
 @app.get("/api/health")
 def home():
     print("testest")
-    session = Session(engine)
+    with Session(engine) as session:
+        draft = d(
+            chat_id=0,
+            num_players=4,
+            category="test",
+            formation_name="433",
+            teams=["1", "2", "3"],
+            picked_teams=["1", "2", "3"],
+            players_ids=["1", "2", "3"],
+            start_player_idx=-1,
+            curr_player_idx=-1,
+            state=0,
+            curr_team_idx=0,
+            curr_pos="p1"
+        )
+        session.add(draft)
+        session.commit()
+        stmt = select(d)
 
-    # get & print foos
-    stmt = select(Foo)
-
-    for item in session.scalars(stmt):
-        print(item)
-
-    session.close()
+        for item in session.scalars(stmt):
+            print(item)
 
 async def handle_start(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not update.message or context == None:
