@@ -6,6 +6,10 @@ name = "pypi"
 [packages]
 python-telegram-bot = {extras = ["job-queue"], version = "*"}
 python-dotenv = "*"
+libsql-experimental = "*"
+sqlalchemy-libsql = "*"
+fastapi = "*"
+uvicorn = "*"
 
 [dev-packages]
 

@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from os import getenv
 import telegram
@@ -6,11 +7,47 @@ from telegram.ext._handlers.messagehandler import MessageHandler
 from draft import handle_draft_add_pos, start_draft_game_command_handler,  new_draft_game_command_handler, join_draft_game_command_handler, set_draft_game_state_command_handler, cancel_draft_game_command_handler, vote_recive_poll_answer_handler, position_draft_message_handler, join_draft_game_callback_handler, random_team_draft_game_callback_handler, end_vote_draft_game_command_handler, start_vote_draft_game_command_handler
 from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_answer_question_command_handler, guess_the_player_proccess_answer_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_start_round_command_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_guess_the_player_answer_question_command, handle_guess_the_player_ask_question_command, handle_guess_the_player_proccess_answer_command, handle_guess_the_player_start_round
 from shared import Draft, GuessThePlayer, Wilty, games
+from fastapi import FastAPI, Request, Response 
 
 load_dotenv()
 
 BOT_API_TOKEN = getenv("BOT_API_TOKEN")
+if not BOT_API_TOKEN:
+    BOT_API_TOKEN = ""
 
+WEBHOOK_URL = getenv("WEBHOOK_URL")
+    
+SERVER_URL = "http://127.0.0.1:5000"
+
+ptb = (
+    telegram.ext.Application.builder()
+    .updater(None)
+    .token(BOT_API_TOKEN) 
+    .read_timeout(7)
+    .get_updates_read_timeout(42)
+    .build()
+)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    print(WEBHOOK_URL)
+    if not WEBHOOK_URL:
+        return
+
+    await ptb.bot.setWebhook(WEBHOOK_URL) 
+    async with ptb:
+        await ptb.start()
+        yield
+        await ptb.stop()
+
+app = FastAPI(lifespan=lifespan)
+
+@app.post("/")
+async def process_update(request: Request):
+    req = await request.json()
+    update = telegram.Update.de_json(req, ptb.bot)
+    await ptb.process_update(update)
+    return Response(status_code=200)
 
 async def handle_start(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not update.message or context == None:
@@ -59,38 +96,30 @@ async def handle_dispatch_messages(update: telegram.Update, context: telegram.ex
         print("should be eror")
         return
 
-def main():
-    if not BOT_API_TOKEN:
-        return
 
-    application = telegram.ext.Application.builder().token(BOT_API_TOKEN).build()
-    application.add_handler(guess_the_player_new_game_command_handler)
-    application.add_handler(guess_the_player_join_game_command_handler)
-    application.add_handler(guess_the_player_join_game_callback_handler)
-    application.add_handler(guess_the_player_start_game_command_handler)
-    application.add_handler(guess_the_player_ask_question_command_handler)
-    #application.add_handler(guess_the_player_answer_question_command_handler)
-    #application.add_handler(guess_the_player_proccess_answer_command_handler)
-    application.add_handler(guess_the_player_cancel_game_command_handler)
-    #application.add_handler(guess_the_player_start_round_command_handler)
-    application.add_handler(guess_the_player_leave_game_command_handler)
-    application.add_handler(guess_thE_player_get_questions_command_handler)
+ptb.add_handler(guess_the_player_new_game_command_handler)
+ptb.add_handler(guess_the_player_join_game_command_handler)
+ptb.add_handler(guess_the_player_join_game_callback_handler)
+ptb.add_handler(guess_the_player_start_game_command_handler)
+ptb.add_handler(guess_the_player_ask_question_command_handler)
+#ptb.add_handler(guess_the_player_answer_question_command_handler)
+#ptb.add_handler(guess_the_player_proccess_answer_command_handler)
+ptb.add_handler(guess_the_player_cancel_game_command_handler)
+#ptb.add_handler(guess_the_player_start_round_command_handler)
+ptb.add_handler(guess_the_player_leave_game_command_handler)
+ptb.add_handler(guess_thE_player_get_questions_command_handler)
 
-    application.add_handler(new_draft_game_command_handler)
-    application.add_handler(join_draft_game_command_handler)
-    application.add_handler(join_draft_game_callback_handler)
-    application.add_handler(start_draft_game_command_handler)
-    #application.add_handler(position_draft_message_handler)
-    application.add_handler(set_draft_game_state_command_handler)
-    application.add_handler(random_team_draft_game_callback_handler)
-    application.add_handler(cancel_draft_game_command_handler)
-    application.add_handler(end_vote_draft_game_command_handler)
-    application.add_handler(start_vote_draft_game_command_handler)
-    application.add_handler(vote_recive_poll_answer_handler)
-    
-    application.add_handler(MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_dispatch_messages))
+ptb.add_handler(new_draft_game_command_handler)
+ptb.add_handler(join_draft_game_command_handler)
+ptb.add_handler(join_draft_game_callback_handler)
+ptb.add_handler(start_draft_game_command_handler)
+#ptb.add_handler(position_draft_message_handler)
+ptb.add_handler(set_draft_game_state_command_handler)
+ptb.add_handler(random_team_draft_game_callback_handler)
+ptb.add_handler(cancel_draft_game_command_handler)
+ptb.add_handler(end_vote_draft_game_command_handler)
+ptb.add_handler(start_vote_draft_game_command_handler)
+ptb.add_handler(vote_recive_poll_answer_handler)
 
-    application.run_polling(allowed_updates=telegram.Update.ALL_TYPES)
+ptb.add_handler(MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_dispatch_messages))
 
-if __name__ == "__main__":
-    main()
