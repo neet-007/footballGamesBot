@@ -23,7 +23,7 @@ TURSO_DATABASE_URL = getenv("TURSO_DATABASE_URL", "http://127.0.0.1:8080")
 dbUrl = f"sqlite+{TURSO_DATABASE_URL}"
 
 print("db url: ", TURSO_DATABASE_URL)
-engine = create_engine(f"sqlite:///{TURSO_DATABASE_URL}", connect_args={'check_same_thread': False}, echo=True)
+engine = create_engine(f"sqlite:///{TURSO_DATABASE_URL}/", connect_args={'check_same_thread': False}, echo=True)
 
 ptb = (
     telegram.ext.Application.builder()
