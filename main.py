@@ -1,13 +1,11 @@
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from os import getenv
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
 import telegram
 import telegram.ext
 from telegram.ext._handlers.messagehandler import MessageHandler
 from db.models import Base, Draft as d, Player
-from draft import handle_draft_add_pos, start_draft_game_command_handler,  new_draft_game_command_handler, join_draft_game_command_handler, set_draft_game_state_command_handler, cancel_draft_game_command_handler, vote_recive_poll_answer_handler, position_draft_message_handler, join_draft_game_callback_handler, random_team_draft_game_callback_handler, end_vote_draft_game_command_handler, start_vote_draft_game_command_handler
+from draft import handle_draft_add_pos, start_draft_game_command_handler,  new_draft_game_command_handler, join_draft_game_command_handler, set_draft_game_state_command_handler, cancel_draft_game_command_handler, vote_recive_poll_answer_handler, position_draft_message_handler, join_draft_game_callback_handler, random_team_draft_game_callback_handler, end_vote_draft_game_command_handler, start_vote_draft_game_command_handler, test_handler
 from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_answer_question_command_handler, guess_the_player_proccess_answer_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_start_round_command_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_guess_the_player_answer_question_command, handle_guess_the_player_ask_question_command, handle_guess_the_player_proccess_answer_command, handle_guess_the_player_start_round
 from shared import Draft, GuessThePlayer, Wilty, games
 from fastapi import FastAPI, Request, Response 
@@ -19,11 +17,6 @@ if not BOT_API_TOKEN:
     BOT_API_TOKEN = ""
 
 WEBHOOK_URL = getenv("WEBHOOK_URL")
-TURSO_DATABASE_URL = getenv("TURSO_DATABASE_URL", "http://127.0.0.1:8080") 
-print("db url: ", TURSO_DATABASE_URL)
-
-
-engine = create_engine("sqlite+libsql" + TURSO_DATABASE_URL, connect_args={'check_same_thread': False}, echo=True)
 
 ptb = (
     telegram.ext.Application.builder()
@@ -58,30 +51,6 @@ async def process_update(request: Request):
 @app.get("/api/health")
 def home():
     print("testest")
-    with Session(engine) as session:
-        Base.metadata.drop_all(engine)
-        Base.metadata.create_all(engine)
-        player = Player(
-            player_id=0,
-            chat_id=0,
-        )
-        session.add(player)
-        session.commit()
-        draft = d(
-            chat_id=0,
-            num_players=4,
-            category="test cat",
-            formation_name="443",
-            start_player_idx=1,
-            player_id=player.player_id,
-            chat_key_id=player.chat_id,
-        )
-        session.add(draft)
-        session.commit()
-        stmt = select(d)
-
-        for item in session.scalars(stmt):
-            print(item.chat_id, item.category, item.formation_name, item.state, item.curr_pos)
 
 async def handle_start(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not update.message or context == None:
@@ -154,6 +123,8 @@ ptb.add_handler(cancel_draft_game_command_handler)
 ptb.add_handler(end_vote_draft_game_command_handler)
 ptb.add_handler(start_vote_draft_game_command_handler)
 ptb.add_handler(vote_recive_poll_answer_handler)
+
+ptb.add_handler(test_handler)
 
 ptb.add_handler(MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_dispatch_messages))
 

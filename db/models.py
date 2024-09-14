@@ -13,11 +13,17 @@ class Foo(Base):
     def __repr__(self) -> str:
         return f"Item(id={self.id!r}, bar={self.bar!r})"
 
-player_draft_association= Table(
+player_draft_association = Table(
     "player_draft", Base.metadata,
-    Column('player_id', Integer, ForeignKey('player.player_id')),
-    Column('draft_id', Integer, ForeignKey('draft.chat_id')),
-    Column('picked', Boolean, default=False)
+    Column('player_id', Integer, nullable=False),
+    Column('chat_key_id', Integer, nullable=False),
+    Column('draft_id', Integer, ForeignKey('draft.chat_id'), nullable=False),
+    Column('picked', Boolean, default=False),
+    ForeignKeyConstraint(
+        ['player_id', 'chat_key_id'],
+        ['player.player_id', 'player.chat_id']
+    ),
+    PrimaryKeyConstraint('player_id', 'draft_id')  
 )
 
 draft_team_association = Table(
