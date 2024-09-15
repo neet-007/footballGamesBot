@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, ForeignKeyConstraint, Integer, PrimaryKeyConstraint, String, Table
+from sqlalchemy import Boolean, Column, ForeignKey, ForeignKeyConstraint, Integer, PrimaryKeyConstraint, String, Table, null
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
@@ -50,20 +50,21 @@ class Player(Base):
 class Draft(Base):
     __tablename__ = "draft"
     chat_id:Mapped[int] = mapped_column(Integer, primary_key=True)
-    num_players:Mapped[int] = mapped_column(Integer, nullable=False)
-    category:Mapped[str] = mapped_column(String(50), nullable=False)
-    formation_name:Mapped[str] = mapped_column(String(8), nullable=False)
+    num_players:Mapped[int] = mapped_column(Integer, default=0)
+    category:Mapped[str] = mapped_column(String(50), nullable=True)
+    formation_name:Mapped[str] = mapped_column(String(8), nullable=True)
 
     teams = relationship("Team", secondary=draft_team_association, back_populates="drafts")
     players = relationship("Player", secondary=player_draft_association, back_populates="drafts")
-    start_player_idx:Mapped[int] = mapped_column(Integer, nullable=False)
+    start_player_idx:Mapped[int] = mapped_column(Integer, default=0)
 
-    player_id:Mapped[int] = mapped_column(Integer, nullable=False)
-    chat_key_id:Mapped[int] = mapped_column(Integer, nullable=False)
+    player_id:Mapped[int] = mapped_column(Integer, nullable=True)
+    chat_key_id:Mapped[int] = mapped_column(Integer, nullable=True)
     curr_player = relationship("Player", back_populates="game_where_curr")
 
-    state:Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    curr_pos:Mapped[str] = mapped_column(String(3), nullable=False, default="p1")
+    state:Mapped[int] = mapped_column(Integer, default=0)
+    curr_pos:Mapped[str] = mapped_column(String(3), default="p1")
+    started:Mapped[bool] = mapped_column(Boolean, default=False)
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -80,23 +81,24 @@ class Team(Base):
 
 class PlayerTeam(Base):
     __tablename__ = "player_team"
-    chat_id:Mapped[int] = mapped_column(Integer, primary_key=True)
+    id:Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id:Mapped[int] = mapped_column(Integer)
 
-    player_id:Mapped[int] = mapped_column(Integer, nullable=False)
+    player_id:Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
     chat_key_id:Mapped[int] = mapped_column(Integer, nullable=False)
     player = relationship("Player", back_populates="team")
 
-    p1:Mapped[str] = mapped_column(String(50), nullable=False)
-    p2:Mapped[str] = mapped_column(String(50), nullable=False)
-    p3:Mapped[str] = mapped_column(String(50), nullable=False)
-    p4:Mapped[str] = mapped_column(String(50), nullable=False)
-    p5:Mapped[str] = mapped_column(String(50), nullable=False)
-    p6:Mapped[str] = mapped_column(String(50), nullable=False)
-    p7:Mapped[str] = mapped_column(String(50), nullable=False)
-    p8:Mapped[str] = mapped_column(String(50), nullable=False)
-    p9:Mapped[str] = mapped_column(String(50), nullable=False)
-    p10:Mapped[str] = mapped_column(String(50), nullable=False)
-    p11:Mapped[str] = mapped_column(String(50), nullable=False)
+    p1:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
+    p2:Mapped[str] = mapped_column(String(50),  nullable=True, default=null())
+    p3:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
+    p4:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
+    p5:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
+    p6:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
+    p7:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
+    p8:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
+    p9:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
+    p10:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
+    p11:Mapped[str] = mapped_column(String(50), nullable=True, default=null())
 
     __table_args__ = (
         ForeignKeyConstraint(

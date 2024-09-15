@@ -7,7 +7,7 @@ from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
-from shared import GuessThePlayer, Wilty, games, Draft, join_game_draft, remove_jobs, session
+from shared import GuessThePlayer, Wilty, games, Draft, join_game_draft, new_game_draft, remove_jobs, session, start_game_draft
 
 def format_teams(teams:list[tuple[telegram.User, dict[str, str]]], formations:dict[str, str]):
     text = ""
@@ -496,11 +496,26 @@ async def handle_draft_cancel_game(update: telegram.Update, context: telegram.ex
 
     await update.message.reply_text("game has been canceled")
 
-async def handle_test(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+
+async def handle_test_make_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or not update.effective_user or not update.message:
+        return
+
+    res = new_game_draft(update.effective_chat.id, session)
+    await update.message.reply_text(f"{res}")
+
+async def handle_test_join_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or not update.effective_user or not update.message:
         return
 
     res = join_game_draft(update.effective_chat.id, update.effective_user, session)
+    await update.message.reply_text(f"{res}")
+
+async def handle_test_start_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or not update.effective_user or not update.message:
+        return
+
+    res = start_game_draft(update.effective_chat.id, session)
     await update.message.reply_text(f"{res}")
 
 new_draft_game_command_handler = CommandHandler("new_draft", handle_draft_command)
@@ -515,5 +530,7 @@ vote_recive_poll_answer_handler = PollAnswerHandler(handle_draft_vote_recive)
 join_draft_game_callback_handler = CallbackQueryHandler(callback=handle_draft_join_callback, pattern="^draft_join$")
 random_team_draft_game_callback_handler = CallbackQueryHandler(callback=handle_draft_pick_team_callback, pattern="^draft_random_team$")
 
-test_handler = CommandHandler("test", handle_test)
+make_game_test_handler = CommandHandler("test_make", handle_test_make_game)
+join_game_test_handler = CommandHandler("test_join", handle_test_join_game)
+start_game_test_handler = CommandHandler("test_start", handle_test_start_game)
 

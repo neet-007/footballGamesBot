@@ -1,11 +1,12 @@
 from typing import Optional, Union
+from sqlalchemy import ColumnExpressionArgument, select
 from sqlalchemy.orm import Session
 import telegram
 import telegram.ext
 from typing import Literal 
 from random import shuffle, randint
-from db.connection import get_session
-from db.models import Draft as d, Player, player_draft_association
+from db.connection import get_session, new_db
+from db.models import Draft as d, Player, PlayerTeam, player_draft_association
 def remove_jobs(name:str, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job_queue:
         return
@@ -37,6 +38,28 @@ FORMATIONS = {
            "p11":"lst"}
 }
 
+def new_game_draft(chat_id:int, session:Session):
+    try:
+        with session.begin():
+            game = session.query(d).filter(d.chat_id == chat_id).first()
+            if game:
+                return False , "a game has started"
+
+            game = d(
+                chat_id=chat_id,
+                num_players=0,
+                category="",
+                formation_name="",
+                start_player_idx=0,
+            )
+
+            session.add(game)
+            session.commit()
+
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "expection"
 
 def join_game_draft(chat_id: int, player: telegram.User, session: Session):
     try:
@@ -45,6 +68,9 @@ def join_game_draft(chat_id: int, player: telegram.User, session: Session):
             game = session.query(d).filter(d.chat_id == chat_id).first()
             if not game:
                 return False , "no game"
+
+            if game.started:
+                return False, "game has started"
 
             player_db = session.query(Player).filter(Player.player_id == player.id).first()
             if player_db:
@@ -60,7 +86,7 @@ def join_game_draft(chat_id: int, player: telegram.User, session: Session):
             player_draft_db = player_draft_association.insert().values(
                 player_id=player.id,
                 chat_key_id=chat_id,
-                draft_id=player.id,
+                draft_id=chat_id,
                 picked=1
             )
             session.execute(player_draft_db)
@@ -74,14 +100,49 @@ def join_game_draft(chat_id: int, player: telegram.User, session: Session):
         print(f"An error occurred: {e}")
         return False, "expection"
 
-def start_game_draft(self):
-    if self.state != 0 or self.num_players < 2:
-        return False
+def start_game_draft(chat_id: int, session: Session):
+    try:
+        with session.begin():
+            game = session.query(d).filter(d.chat_id == chat_id).first()
+            if not game:
+                return False, "no game"
 
-    self.teams = [""] * (11 + self.num_players)
-    self.picked_teams = [False] * len(self.teams)
-    self.state = 1
-    return True
+            if game.started:
+                return False, "game has stated"
+
+            players = session.execute(
+                select(player_draft_association).where(player_draft_association.c.draft_id == game.chat_id)
+            ).fetchall()
+
+            if not players:
+                return False, "no players associated with the game"
+
+            num_players = len(players)
+
+            if num_players < 2 or num_players != game.num_players:
+                return False, "num players less than 2 or not equal to expected"
+
+            teams = []
+            for player_row in players:
+                player_data = player_row._mapping 
+                team = PlayerTeam(
+                    chat_id=chat_id,
+                    player_id=player_data["player_id"],  
+                    chat_key_id=player_data['chat_key_id'],
+                )
+                teams.append(team)
+    
+            game.state += 1
+            game.started = True
+            #think about picked teams
+
+            session.add_all(teams)
+            session.commit()
+
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
 
 def set_game_states_draft(self, category:str, teams:list[str], formation:str) -> tuple[bool, Literal["game error", "no category error", "num of teams error", "formation error", "duplicate teams error", ""]]:
     if self.state != 1 or self.teams == None:
