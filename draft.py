@@ -7,7 +7,7 @@ from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
-from shared import GuessThePlayer, Wilty, games, Draft, join_game_draft, new_game_draft, remove_jobs, session, start_game_draft
+from shared import FORMATIONS, GuessThePlayer, Wilty, add_pos_to_team_draft, games, Draft, join_game_draft, new_game_draft, rand_team_draft, remove_jobs, session, set_game_states_draft, start_game_draft
 
 def format_teams(teams:list[tuple[telegram.User, dict[str, str]]], formations:dict[str, str]):
     text = ""
@@ -188,6 +188,9 @@ async def handle_draft_set_state_command(update: telegram.Update, context:telegr
             return await update.message.reply_text("formation must be 442 or 443 or 4231 or 352 or 523 written like this")
         if err == "duplicate teams error":
             return await update.message.reply_text("the teams must be with no duplicates")
+
+    if not game.teams:
+        return await update.message.reply_text("error happend")
 
     joined_games = "\n".join(game.teams)
     await update.message.reply_text(f"the category is {game.category} the formation is {game.formation[0]} the availabe teams are f{joined_games}",
@@ -518,6 +521,100 @@ async def handle_test_start_game(update: telegram.Update, context: telegram.ext.
     res = start_game_draft(update.effective_chat.id, session)
     await update.message.reply_text(f"{res}")
 
+async def handle_test_set_state(update: telegram.Update, context:telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text or not update.effective_chat or not update.effective_user:
+        return
+
+    text = update.message.text.lower().replace("/test_set", "").split(",")
+    if len(text) != 3:
+        return await update.message.reply_text("there is something missing")
+
+    res, err, other = set_game_states_draft(update.effective_chat.id, update.effective_user.id,
+                            text[0].strip(), text[1].split("-"), text[2].strip(),
+                            session)
+    if not res:
+        if err == "game error":
+            return await update.message.reply_text("err happend game aported")
+        if err == "no category error":
+            return await update.message.reply_text("no category provided")
+        if err == "num of teams error":
+            return await update.message.reply_text("number of teams must be")
+        if err == "formation error":
+            return await update.message.reply_text("formation must be 442 or 443 or 4231 or 352 or 523 written like this")
+        if err == "duplicate teams error":
+            return await update.message.reply_text("the teams must be with no duplicates")
+        else:
+            return await update.message.reply_text(f"{err}{other}")
+
+    curr_player = await update.effective_chat.get_member(other[3])
+    await update.message.reply_text(f"the category is {other[0]} the formation is {other[1]} the availabe teams are f{other[2]}",
+                                    parse_mode=telegram.constants.ParseMode.HTML)
+    return await update.message.reply_text(f"player {curr_player.user.mention_html()} press the button to pick team",
+                                           parse_mode=telegram.constants.ParseMode.HTML,
+                                           reply_markup=InlineKeyboardMarkup([
+                                                [InlineKeyboardButton(text="pick team", callback_data="draft_random_team")]
+                                           ]))
+
+async def handle_test_draft_pick_team_callback(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.callback_query or not update.effective_chat or not update.effective_user:
+        return
+
+    q = update.callback_query
+    await q.answer()
+    
+    res, team, formation, curr_pos = rand_team_draft(update.effective_chat.id, update.effective_user.id, session)
+    if not res:
+        print(team, formation, curr_pos)
+        return 
+
+    await context.bot.send_message(text=f"the team is {team} now choose your {FORMATIONS[formation][curr_pos]}", chat_id=update.effective_chat.id)
+
+async def handle_test_draft_add_pos(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue:
+        return
+
+    res, status, other = add_pos_to_team_draft(update.effective_chat.id, update.effective_user.id,
+                                        update.message.text.lower().strip(), session)
+    if not res:
+        if status == "game_error":
+            del games[update.effective_chat.id]
+            return await update.message.reply_text("an error happend game aported")
+        elif status == "picked_pos_error":
+            return await update.message.reply_text("player has already picked this position")
+        elif status == "curr_player_error":
+            return
+        elif status == "picked_team_error":
+            return await update.message.reply_text("this team has already passed")
+        elif status == "taken_player_error":
+            return await update.message.reply_text("this player is taken")
+        else:
+            return await update.message.reply_text(status)
+    if status == "new_pos":
+        if not other[0]:
+            return await update.message.reply_text("error happend")
+        start_player = await update.effective_chat.get_member(other[0])
+        return await update.message.reply_text(f"player {start_player.user.mention_html()} press the button to pick team",
+                                               parse_mode=telegram.constants.ParseMode.HTML,
+                                               reply_markup=InlineKeyboardMarkup([
+                                                    [InlineKeyboardButton(text="pick team", callback_data="draft_random_team")]
+                                               ]))
+    elif status == "same_pos":
+        if not other[1] or not other[2] or not other[3]:
+            return await update.message.reply_text("error happend")
+        curr_player = await update.effective_chat.get_member(other[1])
+        return await update.message.reply_text(f"player {curr_player.user.mention_html()} choose your player for {FORMATIONS[other[2]][other[3]]}", parse_mode=telegram.constants.ParseMode.HTML)
+    elif status == "end_game":
+        data = {"game_id":update.effective_chat.id, "time":datetime.now()}
+        context.job_queue.run_repeating(handle_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id, name="draft_reapting_votes_job")
+        #context.job_queue.run_once(handle_draft_set_votes_job, when=30, data=data, chat_id=update.effective_chat.id, name="draft_set_votes_job")
+        #teams = [(player[0], player[1]) for player in game.players.values()]
+        #teams = format_teams(teams, game.formation[1])
+        #await context.bot.send_message(text=f"the teams\n{teams}", chat_id=update.effective_chat.id, parse_mode=telegram.constants.ParseMode.HTML)
+        #await context.bot.send_message(text="the drafting has ended discuss the teams for 3 minutes then vote for the best", chat_id=update.effective_chat.id)
+        return
+    else:
+        return await update.message.reply_text(status)
+
 new_draft_game_command_handler = CommandHandler("new_draft", handle_draft_command)
 join_draft_game_command_handler = CommandHandler("draft_join", handle_draft_join_command)
 start_draft_game_command_handler = CommandHandler("start_draft", handle_draft_start_game_command)
@@ -528,9 +625,11 @@ start_vote_draft_game_command_handler = CommandHandler("draft_start_vote", handl
 position_draft_message_handler = MessageHandler((telegram.ext.filters.TEXT & ~telegram.ext.filters.COMMAND), handle_draft_add_pos)
 vote_recive_poll_answer_handler = PollAnswerHandler(handle_draft_vote_recive)
 join_draft_game_callback_handler = CallbackQueryHandler(callback=handle_draft_join_callback, pattern="^draft_join$")
-random_team_draft_game_callback_handler = CallbackQueryHandler(callback=handle_draft_pick_team_callback, pattern="^draft_random_team$")
+#random_team_draft_game_callback_handler = CallbackQueryHandler(callback=handle_draft_pick_team_callback, pattern="^draft_random_team$")
 
 make_game_test_handler = CommandHandler("test_make", handle_test_make_game)
 join_game_test_handler = CommandHandler("test_join", handle_test_join_game)
 start_game_test_handler = CommandHandler("test_start", handle_test_start_game)
-
+set_game_test_handler = CommandHandler("test_set", handle_test_set_state)
+random_team_draft_game_callback_handler = CallbackQueryHandler(callback=handle_test_draft_pick_team_callback, pattern="^draft_random_team$")
+position_draft_message_test_handler = MessageHandler((telegram.ext.filters.TEXT & ~telegram.ext.filters.COMMAND), handle_test_draft_add_pos)

@@ -1,12 +1,12 @@
 from typing import Optional, Union
-from sqlalchemy import ColumnExpressionArgument, select
+from sqlalchemy import  Insert, func, or_, select
 from sqlalchemy.orm import Session
 import telegram
 import telegram.ext
 from typing import Literal 
 from random import shuffle, randint
 from db.connection import get_session, new_db
-from db.models import Draft as d, Player, PlayerTeam, player_draft_association
+from db.models import Draft as d, Player, PlayerTeam, Team, player_draft_association, draft_team_association
 def remove_jobs(name:str, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job_queue:
         return
@@ -69,7 +69,7 @@ def join_game_draft(chat_id: int, player: telegram.User, session: Session):
             if not game:
                 return False , "no game"
 
-            if game.started:
+            if game.state != 0:
                 return False, "game has started"
 
             player_db = session.query(Player).filter(Player.player_id == player.id).first()
@@ -87,7 +87,7 @@ def join_game_draft(chat_id: int, player: telegram.User, session: Session):
                 player_id=player.id,
                 chat_key_id=chat_id,
                 draft_id=chat_id,
-                picked=1
+                picked=0
             )
             session.execute(player_draft_db)
 
@@ -107,7 +107,7 @@ def start_game_draft(chat_id: int, session: Session):
             if not game:
                 return False, "no game"
 
-            if game.started:
+            if game.state != 0:
                 return False, "game has stated"
 
             players = session.execute(
@@ -132,8 +132,7 @@ def start_game_draft(chat_id: int, session: Session):
                 )
                 teams.append(team)
     
-            game.state += 1
-            game.started = True
+            game.state = 1
             #think about picked teams
 
             session.add_all(teams)
@@ -144,98 +143,242 @@ def start_game_draft(chat_id: int, session: Session):
         print(f"An error occurred: {e}")
         return False, "exception"
 
-def set_game_states_draft(self, category:str, teams:list[str], formation:str) -> tuple[bool, Literal["game error", "no category error", "num of teams error", "formation error", "duplicate teams error", ""]]:
-    if self.state != 1 or self.teams == None:
-        return False, "game error"
-    if not category:
-        return False, "no category error"
-    if len(teams) != (11 + self.num_players):
-        return False, "num of teams error"
-    formation_ = FORMATIONS.get(formation, None)
-    if formation_ == None:
-        return False, "formation error"
+def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[str], formation:str, session:Session):
+    try:
+        with session.begin():
+            game = session.query(d).filter(d.chat_id == chat_id).first()
+            if not game:
+                return False , "no game found", []
 
-    if len(set(teams)) != len(teams):
-        return False, "duplicate teams error"
+            if game.state != 1 or teams == None:
+                return False, "game error", []
 
-    self.formation[0] = formation
-    self.formation[1] = formation_
+            if not category:
+                return False, "no category error", []
 
-    for i in range(len(teams)):
-        self.teams[i] = teams[i].strip()
+            if len(teams) != (11 + game.num_players):
+                return False, "num of teams error", []
 
-    self.category = category
-    self.start_player_idx = 0
-    self.curr_player_idx = 0
-    shuffle(self.players_ids)
-    self.state = 2
+            if FORMATIONS.get(formation, None) == None:
+                return False, "formation error", []
 
-    return True, ""
+            if len(set(teams)) != len(teams):
+                return False, "duplicate teams error", []
 
-def add_pos_to_team_draft(self, player:telegram.User, added_player:str) -> tuple[bool, Literal["game_error", "curr_player_error", "picked_team_error", "picked_pos_error", "taken_player_error", "new_pos", "same_pos", "end_game"]]:
-    if self.state != 2 or (not player.id in self.players) or self.picked_teams == None:
-        return False, "game_error"
+            if not session.execute(player_draft_association.select().filter(player_draft_association.c.player_id == player_id).limit(1)):
+                return False, "player not in game", []
 
-    if self.players_ids[self.curr_player_idx] != player.id:
-        return False, "curr_player_error"
+            game.formation_name = formation
 
-    if self.picked_teams[self.curr_team_idx]:
-        return False, "picked_team_error"
+            teams_ = [Team()] * len(teams)
+            draft_teams = [{}] * len(teams)
+            for i in range(len(teams)):
+                team = Team(
+                    name=teams[i],
+                    
+                )
 
-    player_ = self.players[player.id]
-    if player_[1][self.curr_pos] != None:
-        return False, "picked_pos_error"
+                teams_[i] = team
 
-    if added_player.lower() in [
-        value
-        for player in self.players.values() 
-        for value in player[1].values()
-    ]:
-        return False, "taken_player_error"
+            session.add_all(teams_)
+            session.flush()
+ 
+            for i in range(len(teams)):
+                draft_teams[i] = {
+                    "team_id":teams_[i].id,
+                    "draft_id":game.chat_id
+                }
 
-    player_[1][self.curr_pos] = added_player.lower()
-    if self.curr_player_idx == (self.start_player_idx + self.num_players - 1) % self.num_players:
-        if self.curr_pos == "p11":
-            self.state = 3
-            return True, "end_game"
+            session.execute(
+                draft_team_association.insert(),
+                draft_teams
+            )
 
-        self.start_player_idx = (self.start_player_idx + 1) % self.num_players
-        self.picked_teams[self.curr_team_idx] = True
-        self.curr_pos = "p" + f"{int(self.curr_pos[1]) + 1}" if len(self.curr_pos) == 2 else  "p" + f"{int(self.curr_pos[1:3]) + 1}"
-        return True, "new_pos"
+            game.category = category
+            
+            #do this
+            player_id_ = session.execute(player_draft_association.select().where(player_draft_association.c.draft_id == chat_id)).first()
+            if not player_id_:
+                return False, "game error", []
 
-    self.curr_player_idx = (self.curr_player_idx + 1) % self.num_players
-    return True, "same_pos"
+            player_id_ = player_id_.player_id
+            game.player_id = player_id
+            #self.curr_player_idx = 0
+            #shuffle(self.players_ids)
 
-def rand_team_draft(self, player_id):
-    if self.state != 2 or self.picked_teams == None or self.teams == None:
-        return ""
+            game.state = 2
+            other = [game.category, game.formation_name, " ".join([team.name for team in game.teams]), player_id_]
+            session.commit()
 
-    if player_id != self.players_ids[self.start_player_idx]:
-        return ""
+            return True, "", other
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "expection", []
 
-    self.curr_team_idx = randint(0, len(self.teams) - 1)
-    while self.picked_teams[self.curr_team_idx]:
-        self.curr_team_idx = randint(0, len(self.teams) - 1)
+def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:Session):
+    try:
+        with session.begin():
+            game = session.query(d).filter(d.chat_id == chat_id).first()
+            if not game:
+                return False , "no game found", [None, None, None]
 
-    return self.teams[self.curr_team_idx]
+            if game.state != 2:
+                return False, "game error", [None, None, None]
 
-def end_game_draft(self, votes:dict[int, int]):
-    if self.state != 3:
-        return []
+            player = session.execute(
+                select(player_draft_association).where(player_draft_association.c.player_id == player_id).limit(1)
+            ).first()
+            
+            if not player:
+                return False, "player not in game", [None, None, None]
+            
+            player = player._asdict() 
 
-    max_vote = float("-inf")
-    max_vote_ids = []
-    for id, vote_count in votes.items():
-        if vote_count > max_vote:
-            max_vote = vote_count
-            max_vote_ids.clear()
-            max_vote_ids.append(id)
-        elif vote_count == max_vote:
-            max_vote_ids.append(id)
+            if game.player_id != player_id:
+                return False, "curr_player_error", [None, None, None]
 
-    return [self.players[x] for x in max_vote_ids]
+            #this is not right
+            curr_team = session.execute(draft_team_association.select().filter(draft_team_association.c.draft_id == chat_id,
+                                                                      draft_team_association.c.team_id == game.curr_team_id)).first()
+            if not curr_team or curr_team.picked:
+                return False, "picked_team_error", [None, None, None]
 
+            #this also not right
+            player_team = session.query(PlayerTeam).filter(
+                PlayerTeam.player_id == player["player_id"],
+                PlayerTeam.chat_id == chat_id
+            ).first()
+
+            if not player_team:
+                return False, "player does not exist in team", [None, None, None]
+
+            if getattr(player_team, game.curr_pos):
+                return False, "picked_pos_error", [None, None, None]
+
+            added_player_lower = added_player.lower()
+            position_filter = or_(
+                PlayerTeam.p1.ilike(added_player_lower),
+                PlayerTeam.p2.ilike(added_player_lower),
+                PlayerTeam.p3.ilike(added_player_lower),
+                PlayerTeam.p4.ilike(added_player_lower),
+                PlayerTeam.p5.ilike(added_player_lower),
+                PlayerTeam.p6.ilike(added_player_lower),
+                PlayerTeam.p7.ilike(added_player_lower),
+                PlayerTeam.p8.ilike(added_player_lower),
+                PlayerTeam.p9.ilike(added_player_lower),
+                PlayerTeam.p10.ilike(added_player_lower),
+                PlayerTeam.p11.ilike(added_player_lower)
+            )
+
+            matching_player_teams = session.query(PlayerTeam).filter(
+                PlayerTeam.chat_id == chat_id,
+                position_filter
+            ).all()
+
+            if matching_player_teams:
+                return False, "taken player error", [None, None, None]
+                    
+            setattr(player_team, game.curr_pos, added_player_lower)
+            
+            non_picked_players = session.execute(select(player_draft_association).where(player_draft_association.c.picked == False)).fetchall()
+            if len(non_picked_players) == 0:
+                if game.curr_pos == "p11":
+                    game.state = 3
+                    other = [None, game.player_id, game.formation_name, game.curr_pos]
+                    return True,"end_game", other
+
+                game.start_player_idx = non_picked_players[randint(0, len(non_picked_players) - 1)].player_id
+                session.execute(
+                    draft_team_association.update()
+                    .where(
+                        draft_team_association.c.draft_id == chat_id,
+                        draft_team_association.c.team_id == game.curr_team_id
+                    )
+                    .values(picked=True)
+                )
+                game.curr_pos = "p" + f"{int(game.curr_pos[1]) + 1}" if len(game.curr_pos) == 2 else  "p" + f"{int(game.curr_pos[1:3]) + 1}"
+                other = [game.start_player_idx, None, game.formation_name, game.curr_pos]
+                session.commit()
+                return True, "new_pos", other
+
+            game.player_id = non_picked_players[randint(0, len(non_picked_players) - 1)].player_id
+            other = [None, game.player_id, game.formation_name, game.curr_pos]
+            return True, "same_pos", other
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "expection", [None, None, None]
+
+def rand_team_draft(chat_id:int, player_id:int, session:Session):
+    try:
+        with session.begin():
+            game = session.query(d).filter(d.chat_id == chat_id).first()
+            if not game:
+                return False , "no game found", "", ""
+
+            player = session.execute(
+                select(player_draft_association).where(player_draft_association.c.player_id == player_id).limit(1)
+            ).first()
+            
+            if not player:
+                return False, "player not in game", "", ""
+            
+            player = player._asdict() 
+
+            if game.state != 2:
+                return False, "game error", "", ""
+
+            if game.player_id != player_id:
+                return False, "curr_player_error", "", ""
+
+            non_picked_teams = session.execute(
+                select(draft_team_association).where(draft_team_association.c.picked == False)
+            ).fetchall()
+            if len(non_picked_teams) == 0:
+                return False, "game error", "", ""
+
+            rand_team = non_picked_teams[randint(0, len(non_picked_teams) - 1)]
+            print("rand_team", rand_team)
+            game.curr_team_id = rand_team.team_id
+            team_instance = session.query(Team).filter(Team.id == rand_team.team_id).first()
+            if not team_instance:
+                return False, "", "", ""
+
+            team_name = team_instance.name
+            formation = game.formation_name
+            curr_pos = game.curr_pos
+            session.commit()
+
+            return True, team_name, formation, curr_pos
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "expection", "", ""
+
+def end_game_draft(chat_id:int, votes:dict[int, int]):
+    try:
+        with session.begin():
+            game = session.query(d).filter(d.chat_id == chat_id).first()
+            if not game:
+                return False , "no game found"
+
+            if game.state != 3:
+                return []
+
+            max_vote = float("-inf")
+            max_vote_ids = []
+            for id, vote_count in votes.items():
+                if vote_count > max_vote:
+                    max_vote = vote_count
+                    max_vote_ids.clear()
+                    max_vote_ids.append(id)
+                elif vote_count == max_vote:
+                    max_vote_ids.append(id)
+
+            session.commit()
+            session.delete(game)
+            return max_vote_ids
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "expection"
 
 class Draft():
     def __init__(self) -> None:
