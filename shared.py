@@ -280,14 +280,29 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                     
             setattr(player_team, game.curr_pos, added_player_lower)
             
-            non_picked_players = session.execute(select(player_draft_association).where(player_draft_association.c.picked == False)).fetchall()
+            session.execute(
+                player_draft_association.update()
+                .where(player_draft_association.c.player_id == player_id)
+                .values(picked=True)
+            )
+
+            session.flush()
+            non_picked_players = session.execute(select(player_draft_association).where(player_draft_association.c.picked == False,
+                                                                                        player_draft_association.c.draft_id == chat_id)).fetchall()
             if len(non_picked_players) == 0:
                 if game.curr_pos == "p11":
                     game.state = 3
-                    other = [None, game.player_id, game.formation_name, game.curr_pos]
+                    other = [game.player_id, game.formation_name, game.curr_pos]
                     return True,"end_game", other
 
-                game.start_player_idx = non_picked_players[randint(0, len(non_picked_players) - 1)].player_id
+                session.execute(
+                    player_draft_association.update()
+                    .where(player_draft_association.c.draft_id == chat_id)
+                    .values(picked=False)  
+                )
+                non_picked_players = session.execute(select(player_draft_association).where(player_draft_association.c.picked == False,
+                                                                                        player_draft_association.c.draft_id == chat_id)).fetchall()
+                game.player_id = non_picked_players[randint(0, len(non_picked_players) - 1)].player_id
                 session.execute(
                     draft_team_association.update()
                     .where(
@@ -296,13 +311,15 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                     )
                     .values(picked=True)
                 )
+                print("GAME CURR POS BEFORE", game.curr_pos)
                 game.curr_pos = "p" + f"{int(game.curr_pos[1]) + 1}" if len(game.curr_pos) == 2 else  "p" + f"{int(game.curr_pos[1:3]) + 1}"
-                other = [game.start_player_idx, None, game.formation_name, game.curr_pos]
+                print("GAME CURR POS AFTER", game.curr_pos)
+                other = [game.player_id, game.formation_name, game.curr_pos]
                 session.commit()
                 return True, "new_pos", other
 
             game.player_id = non_picked_players[randint(0, len(non_picked_players) - 1)].player_id
-            other = [None, game.player_id, game.formation_name, game.curr_pos]
+            other = [game.player_id, game.formation_name, game.curr_pos]
             return True, "same_pos", other
     except Exception as e:
         print(f"An error occurred: {e}")

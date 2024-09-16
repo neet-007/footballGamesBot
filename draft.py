@@ -599,10 +599,10 @@ async def handle_test_draft_add_pos(update: telegram.Update, context: telegram.e
                                                     [InlineKeyboardButton(text="pick team", callback_data="draft_random_team")]
                                                ]))
     elif status == "same_pos":
-        if not other[1] or not other[2] or not other[3]:
+        if not other[0] or not other[1] or not other[2]:
             return await update.message.reply_text("error happend")
-        curr_player = await update.effective_chat.get_member(other[1])
-        return await update.message.reply_text(f"player {curr_player.user.mention_html()} choose your player for {FORMATIONS[other[2]][other[3]]}", parse_mode=telegram.constants.ParseMode.HTML)
+        curr_player = await update.effective_chat.get_member(other[0])
+        return await update.message.reply_text(f"player {curr_player.user.mention_html()} choose your player for {FORMATIONS[other[1]][other[2]]}", parse_mode=telegram.constants.ParseMode.HTML)
     elif status == "end_game":
         data = {"game_id":update.effective_chat.id, "time":datetime.now()}
         context.job_queue.run_repeating(handle_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id, name="draft_reapting_votes_job")
