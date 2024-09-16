@@ -41,7 +41,6 @@ FORMATIONS = {
 def new_game_draft(chat_id: int, session: Session):
     try:
         with session.begin():
-            new_db()
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
             if game:
                 return False, "a game has started"
@@ -99,7 +98,7 @@ def start_game_draft(chat_id: int, session: Session):
             if draft.state != 0:
                 return False, "game has started"
 
-            player_ids = session.query(DraftPlayer).with_entities(DraftPlayer.player_id).filter(DraftPlayer.draft_id == draft.chat_id).all()
+            player_ids = session.query(DraftPlayer).with_entities(DraftPlayer.id).filter(DraftPlayer.draft_id == draft.chat_id).all()
 
             if not player_ids:
                 return False, "no players associated with the game"
@@ -109,7 +108,13 @@ def start_game_draft(chat_id: int, session: Session):
             if num_players < 2 or num_players != draft.num_players:
                 return False, "number of players is less than 2 or not as expected"
 
-            teams = [DraftPlayerTeam(player_id=player_id[0]) for player_id in player_ids]
+            print("WHAT I SHOUDLLLLLLLLLLLLLLLLLLLLLLD", draft.chat_id)
+            print("WHAT I PUUUUUUUUUUUUUUUUT",chat_id)
+            teams = []
+            for player_id in player_ids:
+                print(player_id[0])
+                teams.append(DraftPlayerTeam(player_id=player_id[0], chat_id=chat_id))
+            #teams = [DraftPlayerTeam(player_id=player_id[0], chat_id=chat_id) for player_id in player_ids]
 
             draft.state = 1
             session.add_all(teams)
@@ -173,12 +178,12 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
             game.category = category
             
             #do this
-            player_id_ = session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).first()
-            if not player_id_:
+            player = session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).first()
+            if not player_id:
                 return False, "game error", []
 
-            player_id_ = player_id_.player_id
-            game.current_player_id = player_id
+            player_id_ = player.player_id
+            game.current_player = player
             #self.curr_player_idx = 0
             #shuffle(self.players_ids)
 
@@ -201,12 +206,12 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
             if game.state != 2:
                 return False, "game error", [None, None, None]
 
-            player = session.query(DraftPlayer).with_entities(DraftPlayer.player_id).filter(DraftPlayer.player_id == player_id).first()
+            player = session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id).first()
             
             if not player:
                 return False, "player not in game", [None, None, None]
             
-            if game.current_player_id != player_id:
+            if game.current_player != player:
                 return False, "curr_player_error", [None, None, None]
 
             #this is not right
@@ -217,7 +222,7 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
 
             #this also not right
             player_team = session.query(DraftPlayerTeam).filter(
-                DraftPlayerTeam.player_id == player[0],
+                DraftPlayerTeam.player_id == player.id,
             ).first()
 
             if not player_team:
@@ -228,21 +233,21 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
 
             added_player_lower = added_player.lower()
             position_filter = or_(
-                PlayerTeam.p1.ilike(added_player_lower),
-                PlayerTeam.p2.ilike(added_player_lower),
-                PlayerTeam.p3.ilike(added_player_lower),
-                PlayerTeam.p4.ilike(added_player_lower),
-                PlayerTeam.p5.ilike(added_player_lower),
-                PlayerTeam.p6.ilike(added_player_lower),
-                PlayerTeam.p7.ilike(added_player_lower),
-                PlayerTeam.p8.ilike(added_player_lower),
-                PlayerTeam.p9.ilike(added_player_lower),
-                PlayerTeam.p10.ilike(added_player_lower),
-                PlayerTeam.p11.ilike(added_player_lower)
+                DraftPlayerTeam.p1.ilike(added_player_lower),
+                DraftPlayerTeam.p2.ilike(added_player_lower),
+                DraftPlayerTeam.p3.ilike(added_player_lower),
+                DraftPlayerTeam.p4.ilike(added_player_lower),
+                DraftPlayerTeam.p5.ilike(added_player_lower),
+                DraftPlayerTeam.p6.ilike(added_player_lower),
+                DraftPlayerTeam.p7.ilike(added_player_lower),
+                DraftPlayerTeam.p8.ilike(added_player_lower),
+                DraftPlayerTeam.p9.ilike(added_player_lower),
+                DraftPlayerTeam.p10.ilike(added_player_lower),
+                DraftPlayerTeam.p11.ilike(added_player_lower)
             )
 
-            matching_player_teams = session.query(PlayerTeam).filter(
-                PlayerTeam.chat_id == chat_id,
+            matching_player_teams = session.query(DraftPlayerTeam).filter(
+                DraftPlayerTeam.chat_id == chat_id,
                 position_filter
             ).all()
 
@@ -257,15 +262,16 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
             non_picked_players = session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picked == False).all()
 
             if len(non_picked_players) == 0:
+                print("heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeere")
                 if game.curr_pos == "p11":
                     game.state = 3
-                    other = [game.current_player_id, game.formation_name, game.curr_pos]
+                    other = [game.current_player, game.formation_name, game.curr_pos]
                     return True,"end_game", other
 
                 session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picked": False})
                 non_picked_players = session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picked == False).all()
 
-                game.current_player_id = non_picked_players[randint(0, len(non_picked_players) - 1)].player_id
+                game.current_player = non_picked_players[randint(0, len(non_picked_players) - 1)]
                 session.execute(
                     draft_team_association.update()
                     .where(
@@ -277,12 +283,13 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                 print("GAME CURR POS BEFORE", game.curr_pos)
                 game.curr_pos = "p" + f"{int(game.curr_pos[1]) + 1}" if len(game.curr_pos) == 2 else  "p" + f"{int(game.curr_pos[1:3]) + 1}"
                 print("GAME CURR POS AFTER", game.curr_pos)
-                other = [game.current_player_id, game.formation_name, game.curr_pos]
+                other = [game.current_player.player_id, game.formation_name, game.curr_pos]
                 session.commit()
                 return True, "new_pos", other
 
-            game.current_player_id = non_picked_players[randint(0, len(non_picked_players) - 1)].player_id
-            other = [game.current_player_id, game.formation_name, game.curr_pos]
+            game.current_player = non_picked_players[randint(0, len(non_picked_players) - 1)]
+            session.commit()
+            other = [game.current_player.player_id, game.formation_name, game.curr_pos]
             return True, "same_pos", other
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -295,13 +302,14 @@ def rand_team_draft(chat_id:int, player_id:int, session:Session):
             if not game:
                 return False , "no game found", "", ""
 
-            if not session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id).first():
+            player = session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id).first()
+            if not player:
                 return False, "player not in game", "", ""
             
             if game.state != 2:
                 return False, "game error", "", ""
 
-            if game.current_player_id != player_id:
+            if game.current_player != player:
                 return False, "curr_player_error", "", ""
 
             non_picked_teams = session.execute(

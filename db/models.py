@@ -72,6 +72,7 @@ class DraftPlayerTeam(Base):
     __tablename__ = "draft_player_team"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     player_id: Mapped[int] = mapped_column(Integer, ForeignKey('draft_player.id', ondelete='CASCADE'))
+    chat_id: Mapped[int] = mapped_column(Integer)
     player = relationship("DraftPlayer", uselist=False, back_populates="team")
 
     p1: Mapped[str] = mapped_column(String(50), nullable=True)
