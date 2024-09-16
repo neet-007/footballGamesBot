@@ -511,7 +511,7 @@ async def handle_test_join_game(update: telegram.Update, context: telegram.ext.C
     if not update.effective_chat or not update.effective_user or not update.message:
         return
 
-    res = join_game_draft(update.effective_chat.id, update.effective_user, session)
+    res = join_game_draft(update.effective_chat.id, update.effective_user.id, session)
     await update.message.reply_text(f"{res}")
 
 async def handle_test_start_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
