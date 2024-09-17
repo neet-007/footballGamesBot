@@ -178,12 +178,18 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
             game.category = category
             
             #do this
-            player = session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).first()
-            if not player_id:
+            player = (
+                session.query(DraftPlayer)
+                .filter(DraftPlayer.draft_id == chat_id)
+                .order_by(DraftPlayer.time_join.asc())  
+                .first()  
+            )
+            if not player_id or not player:
                 return False, "game error", []
 
             player_id_ = player.player_id
-            game.current_player = player
+            game.current_player_id = player.id
+            game.picking_player_id = player.id
             #self.curr_player_idx = 0
             #shuffle(self.players_ids)
 
@@ -211,7 +217,7 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
             if not player:
                 return False, "player not in game", [None, None, None]
             
-            if game.current_player != player:
+            if game.current_player_id != player.id:
                 return False, "curr_player_error", [None, None, None]
 
             #this is not right
@@ -256,22 +262,49 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                     
             setattr(player_team, game.curr_pos, added_player_lower)
             
-            session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id).update({"picked": True})
+            session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).update({"picked": True}) 
+            #session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id).update({"picked": True})
 
             session.flush()
-            non_picked_players = session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picked == False).all()
+            non_picked_players = (
+                    session.query(DraftPlayer)
+                    .filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picked == False)
+                    .order_by(DraftPlayer.time_join.asc())
+                    .all()
+            )
 
             if len(non_picked_players) == 0:
                 print("heeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeere")
                 if game.curr_pos == "p11":
                     game.state = 3
-                    other = [game.current_player, game.formation_name, game.curr_pos]
+                    curr_player = session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).first()
+                    if not curr_player:
+                        return False, "", [None, None, None]
+
+                    other = [curr_player.player_id, game.formation_name, game.curr_pos]
                     return True,"end_game", other
 
                 session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picked": False})
-                non_picked_players = session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picked == False).all()
+                session.flush()
+                non_picked_players = (
+                        session.query(DraftPlayer)
+                        .filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picking == False)
+                        .order_by(DraftPlayer.time_join.asc())
+                        .all()
+                )
+                if len(non_picked_players) == 0:
+                    session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picking": False})
+                    session.flush()
+                    non_picked_players = (
+                            session.query(DraftPlayer)
+                            .filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picking == False)
+                            .order_by(DraftPlayer.time_join.asc())
+                            .all()
+                    )
 
-                game.current_player = non_picked_players[randint(0, len(non_picked_players) - 1)]
+
+                game.picking_player_id = non_picked_players[0].id
+                game.current_player_id = non_picked_players[0].id
                 session.execute(
                     draft_team_association.update()
                     .where(
@@ -283,13 +316,22 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                 print("GAME CURR POS BEFORE", game.curr_pos)
                 game.curr_pos = "p" + f"{int(game.curr_pos[1]) + 1}" if len(game.curr_pos) == 2 else  "p" + f"{int(game.curr_pos[1:3]) + 1}"
                 print("GAME CURR POS AFTER", game.curr_pos)
-                other = [game.current_player.player_id, game.formation_name, game.curr_pos]
+                curr_player = session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).first()
+                if not curr_player:
+                    return False, "", [None, None, None]
+
+                other = [curr_player.player_id, game.formation_name, game.curr_pos]
                 session.commit()
                 return True, "new_pos", other
 
-            game.current_player = non_picked_players[randint(0, len(non_picked_players) - 1)]
+            game.current_player_id = non_picked_players[0].id
+            session.flush()
+            curr_player = session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).first()
+            if not curr_player:
+                return False, "", [None, None, None]
+
+            other = [curr_player.player_id, game.formation_name, game.curr_pos]
             session.commit()
-            other = [game.current_player.player_id, game.formation_name, game.curr_pos]
             return True, "same_pos", other
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -309,9 +351,10 @@ def rand_team_draft(chat_id:int, player_id:int, session:Session):
             if game.state != 2:
                 return False, "game error", "", ""
 
-            if game.current_player != player:
+            if game.picking_player_id != player.id:
                 return False, "curr_player_error", "", ""
 
+            session.query(DraftPlayer).filter(DraftPlayer.id == game.picking_player_id).update({"picking":True})
             non_picked_teams = session.execute(
                 select(draft_team_association).where(draft_team_association.c.picked == False)
             ).fetchall()

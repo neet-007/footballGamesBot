@@ -30,12 +30,16 @@ class Draft(Base):
     formation_name: Mapped[str] = mapped_column(String(8), nullable=True)
 
     game = relationship("Game", uselist=False, back_populates="draft")
-    players = relationship("DraftPlayer", backref="draft")
+    players = relationship("DraftPlayer", backref="draft", foreign_keys="DraftPlayer.draft_id")
 
     teams = relationship("Team", secondary=draft_team_association, back_populates="drafts")
 
-    current_player = relationship("DraftPlayer", uselist=False, back_populates="draft_current", overlaps="players,draft")
-    picking_player = relationship("DraftPlayer", uselist=False, back_populates="draft_picking", overlaps="current_player,players,draft")
+    current_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id"), nullable=True)
+    #current_player = relationship("DraftPlayer", foreign_keys=[current_player_id], back_populates="draft_current")
+
+    picking_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id"), nullable=True)
+    #picking_player = relationship("DraftPlayer", uselist=False, back_populates="draft_picking", overlaps="current_player,players,draft",
+     #                             foreign_keys=[picking_player_id])
 
     curr_team_id: Mapped[int] = mapped_column(Integer, ForeignKey("team.id"), nullable=True)
 
@@ -54,10 +58,15 @@ class DraftPlayer(Base):
     player_id: Mapped[int] = mapped_column(Integer)
     draft_id: Mapped[int] = mapped_column(Integer, ForeignKey('draft.chat_id'))
     picked: Mapped[bool] = mapped_column(Boolean, default=False)
+    picking: Mapped[bool] = mapped_column(Boolean, default=False)
     time_join: Mapped[datetime] = mapped_column(TIMESTAMP, default=func.now())
 
-    draft_current = relationship("Draft", uselist=False, back_populates="current_player", overlaps="draft,picking_player,players")
-    draft_picking = relationship("Draft", uselist=False, back_populates="picking_player", overlaps="current_player,draft,draft_current,players")
+    #draft_current = relationship("Draft", back_populates="current_player", foreign_keys=[Draft.current_player_id])
+    #draft_picking = relationship("Draft", uselist=False, back_populates="picking_player", overlaps="current_player,draft,draft_current,players",
+                                 #foreign_keys=[Draft.picking_player_id])
+    draft_current = relationship("Draft", uselist=False, backref="current_player", foreign_keys=[Draft.current_player_id])
+    draft_picking = relationship("Draft", uselist=False, backref="picking_player", overlaps="current_player,draft,draft_current,players",
+                                 foreign_keys=[Draft.picking_player_id])
     team = relationship("DraftPlayerTeam", uselist=False, back_populates="player", cascade="all, delete-orphan")
 
     __table_args__ = (
