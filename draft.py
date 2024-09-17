@@ -7,7 +7,7 @@ from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
-from shared import FORMATIONS, GuessThePlayer, Wilty, add_pos_to_team_draft, games, Draft, join_game_draft, new_game_draft, rand_team_draft, remove_jobs, session, set_game_states_draft, start_game_draft
+from shared import FORMATIONS, GuessThePlayer, Wilty, add_pos_to_team_draft, check_draft, end_game_draft, games, Draft, get_vote_data, join_game_draft, new_game_draft, rand_team_draft, remove_jobs, session, set_game_states_draft, start_game_draft
 
 def format_teams(teams:list[tuple[telegram.User, dict[str, str]]], formations:dict[str, str]):
     text = ""
@@ -452,29 +452,17 @@ async def handle_draft_end_game_job(context: telegram.ext.ContextTypes.DEFAULT_T
     print("if passed")
     remove_jobs("draft_reapting_votes_job", context)
     remove_jobs("draft_reapting_votes_end_job", context)
-    chat_id = context.job.data["game_id"]
-    game:Draft | GuessThePlayer | Wilty | None = games.get(chat_id, None)
-    if game == None or not isinstance(game, Draft) or game.state != 3:
-        return
 
-    print("found game")
-    try:
-        votes = context.job.data["votes"]
-    except KeyError:
-        print("coundt find votes")
-        return
-
-    username_to_id = {player[0].full_name:id for id, player in game.players.items()}
-    votes = {username_to_id[username]:count for username, count in votes.items()}
 
     print("found votes")
-    winners = game.end_game(votes=votes)
+    winners = context.job.data["winners"]
+    formation = context.job.data["formation"]
     winners_text = ""
     teams = []
     for winner in winners:
         winners_text += f"{winner[0].mention_html()}\n"
         teams.append((winner[0], winner[1]))
-    teams = format_teams(teams, game.formation[1])
+    teams = format_teams(teams, formation)
     await context.bot.send_message(text=f"the winners are {winners_text}\n the teams\n{teams}", chat_id=context.job.chat_id, parse_mode=telegram.constants.ParseMode.HTML)
 
 async def handle_draft_cancel_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
@@ -608,8 +596,8 @@ async def handle_test_draft_add_pos(update: telegram.Update, context: telegram.e
             return await update.message.reply_text("error happend")
 
         data = {"game_id":update.effective_chat.id, "time":datetime.now()}
-        context.job_queue.run_repeating(handle_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id, name="draft_reapting_votes_job")
-        context.job_queue.run_once(handle_draft_set_votes_job, when=30, data=data, chat_id=update.effective_chat.id, name="draft_set_votes_job")
+        context.job_queue.run_repeating(handle_test_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id, name="draft_reapting_votes_job")
+        context.job_queue.run_once(handle_test_draft_set_votes_job, when=30, data=data, chat_id=update.effective_chat.id, name="draft_set_votes_job")
         teams = []
         for player_id, team in other[3]:
             player = await update.effective_chat.get_member(player_id)
@@ -621,6 +609,104 @@ async def handle_test_draft_add_pos(update: telegram.Update, context: telegram.e
         return
     else:
         return await update.message.reply_text(status)
+
+async def handle_test_draft_reapting_votes_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    print("repeating vote")
+    if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
+        return
+
+    print("passed if")
+    res, state = check_draft(context.job.chat_id)
+    if not res or state != 3:
+        return
+
+    print("found game")
+    await context.bot.send_message(
+        chat_id=context.job.chat_id, 
+        text=f"Remaining time to decide: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+    )
+
+async def handle_test_draft_set_votes_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    print("set votes")
+    if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
+        return
+
+    print("if passed")
+    remove_jobs("draft_reapting_votes_job", context)
+    chat_id = context.job.data["game_id"]
+    res, state, players_ids = get_vote_data(chat_id)
+    if not res or state != 3 or not players_ids:
+        return
+
+    players = []
+    for id in players_ids:
+        player = await context.bot.get_chat_member(chat_id, id[0])
+        players.append(player.user.full_name)
+
+    print("found game")
+    poll_data = {
+        "chat_id":chat_id,
+        "questions":players,
+        "votes_count":{player:0 for player in players},
+        "answers":0
+    }
+    message = await context.bot.send_poll(question="you has the best team" ,options=poll_data["questions"], chat_id=chat_id,
+                                is_anonymous=False, allows_multiple_answers=False)
+
+    poll_data["message_id"] = message.message_id
+    context.bot_data[f"poll_{message.poll.id}"] = poll_data
+    context.bot_data[f"poll_{chat_id}"] = poll_data
+    print(context.bot_data)
+    data = {"game_id":chat_id, "time":datetime.now(), "poll_id":message.poll.id}
+    context.job_queue.run_repeating(handle_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id, name="draft_reapting_votes_end_job")
+    context.job_queue.run_once(handle_test_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,name="draft_end_votes_job")
+
+async def handle_test_draft_end_votes_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
+        return
+
+    remove_jobs("draft_reapting_votes_job", context)
+    remove_jobs("draft_reapting_votes_end_job", context)
+    chat_id = context.job.data["game_id"]
+    
+    poll_id = context.job.data["poll_id"]
+    poll_data = context.bot_data[f"poll_{poll_id}"]
+    chat_id = poll_data["chat_id"]
+
+
+    votes = poll_data["votes_count"]
+    res, players_and_teams, formation = end_game_draft(chat_id)
+    if not res or not players_and_teams or not formation:
+        return await context.bot.send_message(text="error happend or excpetion", chat_id=chat_id)
+    
+    players = []
+    for id, _ in players_and_teams:
+        player = await context.bot.get_chat_member(chat_id=chat_id, user_id=id)
+        players.append(player.user.full_name)
+
+    print(players_and_teams, players)
+    username_to_id = {players[i]:players_and_teams[i][0] for i in range(len(players))}
+    votes = {username_to_id[username]:count for username, count in votes.items()}
+
+    max_vote = float("-inf")
+    max_vote_ids = []
+    for id, vote_count in votes.items():
+        if vote_count > max_vote:
+            max_vote = vote_count
+            max_vote_ids.clear()
+            max_vote_ids.append((id, vote_count))
+        elif vote_count == max_vote:
+            max_vote_ids.append((id, vote_count))
+    print(max_vote_ids)
+    for i, id in enumerate(max_vote_ids):
+        winner = await context.bot.get_chat_member(chat_id=chat_id, user_id=id[0])
+        max_vote_ids[i] = (winner.user, players_and_teams[i][1])
+
+    print(max_vote_ids)
+    del context.bot_data[f"poll_{poll_id}"]
+    await context.bot.stop_poll(chat_id=chat_id, message_id=poll_data["message_id"])
+    data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
+    context.job_queue.run_once(handle_draft_end_game_job, when=0, data=data, chat_id=chat_id ,name="draft_end_game_job")
 
 new_draft_game_command_handler = CommandHandler("new_draft", handle_draft_command)
 join_draft_game_command_handler = CommandHandler("draft_join", handle_draft_join_command)

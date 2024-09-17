@@ -38,6 +38,31 @@ FORMATIONS = {
            "p11":"lst"}
 }
 
+def check_draft(chat_id:int):
+    try:
+        with session.begin():
+            game = session.query(d.state).filter(d.chat_id == chat_id).first()
+            if not game:
+                return False, -1
+
+            return True, game[0]
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, -1
+
+def get_vote_data(chat_id:int):
+    try:
+        with session.begin():
+            state = session.query(d.state).filter(d.chat_id == chat_id).first()
+            players = session.query(DraftPlayer.player_id).filter(DraftPlayer.draft_id == chat_id).all()
+            if not state or not players:
+                return False, -1, None
+
+            return True, state[0], players
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, -1, None
+
 def new_game_draft(chat_id: int, session: Session):
     try:
         with session.begin():
@@ -394,36 +419,42 @@ def rand_team_draft(chat_id:int, player_id:int, session:Session):
         print(f"An error occurred: {e}")
         return False, "expection", "", ""
 
-def end_game_draft(chat_id:int, votes:dict[int, int]):
+def end_game_draft(chat_id:int):
     try:
         with session.begin():
-            game = session.query(Game).filter(Game.chat_id == chat_id).first
-            draft = session.query(d).filter(d.chat_id == chat_id).first()
-            if not game or not draft:
+            game = session.query(Game).filter(Game.chat_id == chat_id).first()
+            formation = session.query(d.formation_name).filter(d.chat_id == chat_id).first()
+            query_results = (
+                session.query(
+                    DraftPlayerTeam.player_id,
+                    *[getattr(DraftPlayerTeam, f'p{i}') for i in range(1, 12)]
+                )
+                .filter(DraftPlayerTeam.chat_id == chat_id)
+                .all()
+            )
+
+            player_ids = [result[0] for result in query_results]
+
+            players = (
+                session.query(DraftPlayer.player_id)
+                .filter(DraftPlayer.id.in_(player_ids))
+                .all()
+            )
+            player_dict = {player_ids[i]: players[i] for i in range (len(players))}
+            teams = [
+                (player_dict[result[0]][0], {f'p{i+1}': result[i+1] for i in range(11)})
+                for result in query_results
+            ]
+            if not game or not players or not formation:
                 session.delete(game)
-                session.delete(draft)
-                return False , "no game found"
+                return False , None, None
 
-            if draft.state != 3:
-                return []
-
-            max_vote = float("-inf")
-            max_vote_ids = []
-            for id, vote_count in votes.items():
-                if vote_count > max_vote:
-                    max_vote = vote_count
-                    max_vote_ids.clear()
-                    max_vote_ids.append(id)
-                elif vote_count == max_vote:
-                    max_vote_ids.append(id)
-
-            session.commit()
+            formation = formation[0]
             session.delete(game)
-            session.delete(draft)
-            return max_vote_ids
+            return True, teams, formation
     except Exception as e:
         print(f"An error occurred: {e}")
-        return False, "expection"
+        return False, None, None
 
 class Draft():
     def __init__(self) -> None:
