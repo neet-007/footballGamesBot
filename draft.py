@@ -604,13 +604,20 @@ async def handle_test_draft_add_pos(update: telegram.Update, context: telegram.e
         curr_player = await update.effective_chat.get_member(other[0])
         return await update.message.reply_text(f"player {curr_player.user.mention_html()} choose your player for {FORMATIONS[other[1]][other[2]]}", parse_mode=telegram.constants.ParseMode.HTML)
     elif status == "end_game":
+        if not other[0] or not other[1] or not other[2] or not other[3]:
+            return await update.message.reply_text("error happend")
+
         data = {"game_id":update.effective_chat.id, "time":datetime.now()}
         context.job_queue.run_repeating(handle_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id, name="draft_reapting_votes_job")
-        #context.job_queue.run_once(handle_draft_set_votes_job, when=30, data=data, chat_id=update.effective_chat.id, name="draft_set_votes_job")
-        #teams = [(player[0], player[1]) for player in game.players.values()]
-        #teams = format_teams(teams, game.formation[1])
-        #await context.bot.send_message(text=f"the teams\n{teams}", chat_id=update.effective_chat.id, parse_mode=telegram.constants.ParseMode.HTML)
-        #await context.bot.send_message(text="the drafting has ended discuss the teams for 3 minutes then vote for the best", chat_id=update.effective_chat.id)
+        context.job_queue.run_once(handle_draft_set_votes_job, when=30, data=data, chat_id=update.effective_chat.id, name="draft_set_votes_job")
+        teams = []
+        for player_id, team in other[3]:
+            player = await update.effective_chat.get_member(player_id)
+            teams.append((player.user, team))
+
+        teams = format_teams(teams, FORMATIONS[other[1]])
+        await context.bot.send_message(text=f"the teams\n{teams}", chat_id=update.effective_chat.id, parse_mode=telegram.constants.ParseMode.HTML)
+        await context.bot.send_message(text="the drafting has ended discuss the teams for 3 minutes then vote for the best", chat_id=update.effective_chat.id)
         return
     else:
         return await update.message.reply_text(status)
