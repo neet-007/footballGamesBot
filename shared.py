@@ -1,11 +1,11 @@
 from typing import Optional, Union
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 import telegram
 import telegram.ext
 from random import shuffle, randint
 from db.connection import get_session, new_db
-from db.models import Draft as d, DraftPlayer, DraftPlayerTeam, Game, Team, draft_team_association
+from db.models import AskedQuestions, Draft as d, DraftPlayer, DraftPlayerTeam, Game, GuessThePlayerPlayer, Team, draft_team_association, GuessThePlayer as gp
 def remove_jobs(name:str, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job_queue:
         return
@@ -65,6 +65,7 @@ def get_vote_data(chat_id:int):
 def new_game_draft(chat_id: int, session: Session):
     try:
         with session.begin():
+            new_db()
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
             if game:
                 return False, "a game has started"
@@ -464,6 +465,386 @@ def cancel_game_draft(chat_id:int ,session:Session):
     except Exception as e:
         print(f"An error occurred: {e}")
         return False
+
+def new_game_guess_the_player(chat_id:int, session:Session):
+    try:
+        with session.begin():
+            new_db()
+            game = session.query(Game).filter(Game.chat_id == chat_id).first()
+            if game:
+                return False, "a game has started"
+
+            guess_the_player = gp(
+                chat_id=chat_id,
+            )
+            game = Game(
+                chat_id=chat_id,
+            )
+
+            session.add_all([game, guess_the_player])
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+
+def join_game_guess_the_player(chat_id:int, player_id:int, session:Session):
+    try:
+        with session.begin():
+            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            if not guess_the_player:
+                return False, "no game"
+
+            if guess_the_player.state != 0:
+                return False, "game has started"
+
+            player_db = session.query(GuessThePlayerPlayer).filter(GuessThePlayerPlayer.player_id == player_id).first()
+            if player_db:
+                return False, "player already in game"
+
+            player_db = GuessThePlayerPlayer(
+                player_id=player_id,
+                guess_the_player_id=chat_id,
+            )
+            session.add(player_db)
+
+            guess_the_player.num_players += 1
+
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+
+def leave_game_guess_the_player(self, player:telegram.User):
+    try:
+        del self.players[player.id]
+    except KeyError:
+        return False, "player not in game error"
+
+    self.num_players -= 1
+    idx = self.players_ids.index(player.id)
+    self.players_ids.remove(player.id)
+    if player.id in self.muted_players:
+        self.muted_players.remove(player.id)
+
+    if self.num_players == 1:
+        self.state = 4
+        self.winner_id = -2
+        return False, "end game"
+        
+    if len(self.muted_players) == self.num_players or self.curr_player_idx == idx:
+        self.winner_id = -2
+        self.state = 3
+        return False, "end round"
+
+    return True, ""
+
+def start_game_guess_the_player(self, chat_id:int):
+    try:
+        with session.begin():
+            new_db()
+            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            if not guess_the_player:
+                return False, "a game has started"
+
+            if guess_the_player.state != 0:
+                return False, "game error"
+
+            player_ids = (
+                    session.query(GuessThePlayerPlayer)
+                    .with_entities(GuessThePlayerPlayer.id)
+                    .filter(GuessThePlayerPlayer.guess_the_player_id == guess_the_player.chat_id)
+                    .order_by(GuessThePlayerPlayer.time_join.asc())  
+                    .all()
+            )
+
+            if not player_ids:
+                return False, "no players associated with the game", -1
+
+            num_players = len(player_ids)
+
+            if num_players < 2 or num_players != guess_the_player.num_players:
+                return False, "number of players is less than 2 or not as expected", -1
+
+            player_id = player_ids[0]
+            guess_the_player.current_player_id = player_id
+
+            guess_the_player.state = 1
+
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+
+def start_round_guess_the_player(chat_id:int, player_id:int, curr_hints:list[str], curr_answer:str):
+    try:
+        with session.begin():
+            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            if not guess_the_player:
+                return False, "a game has started"
+
+            if guess_the_player.state != 1 and guess_the_player.state != 3:
+                return False, "game error"
+            if len(curr_hints) != 3:
+                return False, "num hints error"
+            if guess_the_player.current_player_id != player_id:
+                return False, "curr player error"
+            if curr_hints == ["", "", ""] or curr_answer == "":
+                return False, "empty inputs"
+
+            guess_the_player.curr_answer = curr_answer.strip().lower()
+            guess_the_player.curr_hints = [hint.strip().capitalize() for hint in curr_hints]
+            guess_the_player.state = 2
+
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+
+def ask_question_guess_the_player(chat_id:int, player_id:int, question:str):
+    try:
+        with session.begin():
+            new_db()
+            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            if not guess_the_player:
+                return False, "a game has started"
+
+            if guess_the_player.state != 2:
+                return False, "game_error"
+
+            if guess_the_player.asking_player_id != None:
+                return False, "there is askin player error"
+
+            if guess_the_player.current_player_id == player_id:
+                return False, "curr player error"
+
+            player = (
+                    session.query(GuessThePlayerPlayer)
+                    .filter(GuessThePlayerPlayer.player_id == player_id,
+                            GuessThePlayerPlayer.guess_the_player_id == chat_id)
+                    .first()
+            )
+
+            if not player:
+                return False, "player not in game"
+
+            if player.questions <= 0:
+                return False, "no questions"
+
+            guess_the_player.curr_question = question.lower().strip()
+            guess_the_player.asking_player_id = player.id
+
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+
+def answer_question_guess_the_player(chat_id:int, player_id:int, player_asked_id:int, question:str, answer:str):
+    try:
+        with session.begin():
+            new_db()
+            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            if not guess_the_player:
+                return False, "a game has started"
+
+            if guess_the_player.state != 2:
+                return False, "game error"
+
+            if guess_the_player.asking_player_id == None:
+                return False, "no asking player error"
+
+            if guess_the_player.asking_player_id != player_asked_id:
+                return False, "player is not the asking error"
+
+            question = question.lower().strip()
+            if guess_the_player.curr_question != question:
+                return False, "not the question"
+
+            if guess_the_player.current_player_id != player_id:
+                return False, "curr player error"
+    
+            asking_player = (
+                    session.query(GuessThePlayerPlayer)
+                    .filter(GuessThePlayerPlayer.player_id == player_asked_id)
+                    .first()
+            )
+
+            if not asking_player:
+                return False, "player not in game"
+
+            question_ = AskedQuestions(
+                question=question,
+                answer=answer.lower().strip(),
+                guess_the_player_id=chat_id
+            )
+
+            asking_player.questions -= 1
+
+            guess_the_player.asking_player_id = None
+            guess_the_player.curr_question = ""
+
+            session.add(question_)
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+
+def proccess_answer_guess_the_player(chat_id:int, player:telegram.User, answer:str):
+    try:
+        with session.begin():
+            new_db()
+            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            if not guess_the_player:
+                return False, "a game has started"
+
+            if guess_the_player.state != 2:
+                return False, "game error"
+
+            if guess_the_player.current_player_id == player.id:
+                return False, "curr player error"
+
+            player_ = (
+                    session.query(GuessThePlayerPlayer)
+                    .filter(GuessThePlayerPlayer.player_id == player.id,
+                            GuessThePlayerPlayer.guess_the_player_id == chat_id)
+                    .first()
+            )
+            if not player_:
+                return False, "player not in game"
+                
+            if player_.muted:
+                return False, "muted player"
+
+            player_.answers -= 1
+            if player_.answers == 0:
+                player_.muted = True
+
+            score = jaro_winkler_similarity(answer.strip().lower(), guess_the_player.curr_answer)
+            if (len(answer.lower().strip()) > 10 and score > 0.85) or (len(answer.lower().strip()) <= 10 and score > 0.92):
+                guess_the_player.state = 3
+                guess_the_player.winning_player_id = player.id
+                return True, "correct"
+
+            muted_players_count = (
+                session.query(func.count(GuessThePlayerPlayer.id)) 
+                .filter(
+                    GuessThePlayerPlayer.guess_the_player_id == chat_id,
+                    GuessThePlayerPlayer.muted == True
+                )
+                .scalar()
+            )
+            if muted_players_count == guess_the_player.num_players - 1:
+                guess_the_player.state = 3
+                guess_the_player.winning_player_id = None
+                return True, "all players muted"
+
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+
+def end_round_guess_the_player(chat_id:int):
+    try:
+        with session.begin():
+            new_db()
+            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            if not guess_the_player:
+                return False, "a game has started"
+
+            if guess_the_player.state != 3:
+                return False, "game error"
+
+            if guess_the_player.winning_player_id == None:
+                curr_player = (
+                        session.query(GuessThePlayerPlayer)
+                        .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id,
+                                GuessThePlayerPlayer.player_id == guess_the_player.current_player_id)
+                        .first()
+                )
+                if not curr_player:
+                    return False, "player not in game"
+                curr_player.score += 1
+            #elif self.winner_id == -2:
+                #pass
+            else: 
+                winning_player = (
+                        session.query(GuessThePlayerPlayer)
+                        .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id,
+                                GuessThePlayerPlayer.player_id == guess_the_player.winning_player_id)
+                        .first()
+                )
+                if not winning_player:
+                    return False, "player not in game"
+
+                winning_player.score += 1
+
+            guess_the_player.curr_hints = ["","","",]
+
+            guess_the_player.curr_answer = ""
+            guess_the_player.winning_player_id = None
+            (
+                session.query(AskedQuestions)
+                .filter(AskedQuestions.guess_the_player_id == chat_id)
+                .delete()
+            )
+
+            (
+                session.query(GuessThePlayerPlayer).
+                filter(GuessThePlayerPlayer.guess_the_player_id == chat_id).
+                update({GuessThePlayerPlayer.muted: False})
+            )
+
+            next_player = (
+                    session.query(GuessThePlayerPlayer)
+                    .with_entities(GuessThePlayerPlayer.id)
+                    .filter(GuessThePlayerPlayer.guess_the_player_id == guess_the_player.chat_id,
+                            GuessThePlayerPlayer.picked == False)
+                    .order_by(GuessThePlayerPlayer.time_join.asc())  
+                    .first()
+            )
+
+            guess_the_player.state = 2
+
+            if not next_player:
+                return True, "game end"
+
+            guess_the_player.current_player_id = next_player
+
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+
+def end_game_guess_the_player(chat_id:int):
+    try:
+        with session.begin():
+            game = session.query(Game).filter(Game.chat_id == chat_id).first()
+            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            if not guess_the_player:
+                return False, "a game has started"
+
+            players = (
+                session.query(GuessThePlayerPlayer)
+                .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id)
+                .all()
+            )
+
+            scores = {player.player_id:player.score for player in players}
+            winners = ""
+            max_score = float('-inf')
+            for player, score in scores.items():
+                if score == max_score:
+                    winners += f"{player}\n"
+                if score > max_score:
+                    max_score = score
+                    winners = ""
+                    winners += f"{player}\n"
+
+            session.delete(game)
+            session.delete(guess_the_player)
+            return scores, winners
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
 
 WILTY_ROUNDS = {
     0:"none",

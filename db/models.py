@@ -1,5 +1,6 @@
 from datetime import datetime
-from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, Table, UniqueConstraint, func
+from typing import Optional
+from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, Table, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
 
 class Base(DeclarativeBase):
@@ -19,6 +20,28 @@ class Game(Base):
     chat_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     draft_id:Mapped[int] = mapped_column(Integer, ForeignKey("draft.chat_id", ondelete="CASCADE"), nullable=True)
     draft = relationship("Draft", uselist=False, back_populates="game")
+    guess_the_player_id:Mapped[int] = mapped_column(Integer, ForeignKey("guess_the_player.chat_id", ondelete="CASCADE"), nullable=True)
+    guess_the_player = relationship("GuessThePlayer", uselist=False, back_populates="game")
+
+class GuessThePlayer(Base):
+    __tablename__ = "guess_the_player"
+    chat_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    num_players: Mapped[int] = mapped_column(Integer, default=0)
+    curr_answer:Mapped[str] = mapped_column(String(40), default="")
+    curr_question:Mapped[str] = mapped_column(String(40), default="")
+    state: Mapped[int] = mapped_column(Integer, default=0)
+    curr_hints: Mapped[list[str]] = mapped_column(JSON, default=["", "", ""])
+
+    game = relationship("Game", uselist=False, cascade="all, delete-orphan")
+
+    players = relationship("GuessThePlayerPlayer", backref="GuessThePlayer", foreign_keys="GuessThePlayerPlayer.guess_the_player_id",
+                           cascade="all, delete-orphan")
+
+    current_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL"), nullable=True)
+    asking_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL"), nullable=True)
+    winning_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL"), nullable=True)
+
+    asked_questions = relationship("AskedQuestions", backref="guess_the_player", cascade="all, delete-orphan")
 
 class Draft(Base):
     __tablename__ = "draft"
@@ -41,6 +64,27 @@ class Draft(Base):
     curr_pos: Mapped[str] = mapped_column(String(3), default="p1")
 
 
+class GuessThePlayerPlayer(Base):
+    __tablename__ = "guess_the_player_player"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(Integer)
+    guess_the_player_id: Mapped[int] = mapped_column(Integer, ForeignKey('guess_the_player.chat_id', ondelete="CASCADE"))
+
+    picked: Mapped[bool] = mapped_column(Boolean, default=False)
+    muted: Mapped[bool] = mapped_column(Boolean, default=False)
+    questions: Mapped[int] = mapped_column(Integer, default=3)
+    answers: Mapped[int] = mapped_column(Integer, default=2)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    time_join: Mapped[datetime] = mapped_column(TIMESTAMP, default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "player_id",
+            "guess_the_player_id",
+            name="uq_player_draft"
+        ),
+    )
+
 class DraftPlayer(Base):
     __tablename__ = "draft_player"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -61,6 +105,13 @@ class DraftPlayer(Base):
         ),
     )
 
+class AskedQuestions(Base):
+    __tablename__ = "asked_questions"
+    id:Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    question:Mapped[str] = mapped_column(String(40))
+    answer:Mapped[str] = mapped_column(String(40))
+    
+    guess_the_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("guess_the_player.chat_id", ondelete="CASCADE"))
 
 class Team(Base):
     __tablename__ = "team"
