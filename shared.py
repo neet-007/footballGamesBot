@@ -1,9 +1,8 @@
 from typing import Optional, Union
-from sqlalchemy import inspect, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 import telegram
 import telegram.ext
-from typing import Literal 
 from random import shuffle, randint
 from db.connection import get_session, new_db
 from db.models import Draft as d, DraftPlayer, DraftPlayerTeam, Game, Team, draft_team_association
@@ -41,14 +40,14 @@ FORMATIONS = {
 def check_draft(chat_id:int):
     try:
         with session.begin():
-            game = session.query(d.state).filter(d.chat_id == chat_id).first()
+            game = session.query(d.state, d.num_players).filter(d.chat_id == chat_id).first()
             if not game:
-                return False, -1
+                return False, -1, -1
 
-            return True, game[0]
+            return True, game[0], game[1]
     except Exception as e:
         print(f"An error occurred: {e}")
-        return False, -1
+        return False, -1, -1
 
 def get_vote_data(chat_id:int):
     try:
@@ -118,20 +117,20 @@ def start_game_draft(chat_id: int, session: Session):
         with session.begin():
             draft = session.query(d).filter(d.chat_id == chat_id).first()
             if not draft:
-                return False, "no game"
+                return False, "no game", -1
 
             if draft.state != 0:
-                return False, "game has started"
+                return False, "game has started", -1
 
             player_ids = session.query(DraftPlayer).with_entities(DraftPlayer.id).filter(DraftPlayer.draft_id == draft.chat_id).all()
 
             if not player_ids:
-                return False, "no players associated with the game"
+                return False, "no players associated with the game", -1
 
             num_players = len(player_ids)
 
             if num_players < 2 or num_players != draft.num_players:
-                return False, "number of players is less than 2 or not as expected"
+                return False, "number of players is less than 2 or not as expected", -1
 
             print("WHAT I SHOUDLLLLLLLLLLLLLLLLLLLLLLD", draft.chat_id)
             print("WHAT I PUUUUUUUUUUUUUUUUT",chat_id)
@@ -139,15 +138,14 @@ def start_game_draft(chat_id: int, session: Session):
             for player_id in player_ids:
                 print(player_id[0])
                 teams.append(DraftPlayerTeam(player_id=player_id[0], chat_id=chat_id))
-            #teams = [DraftPlayerTeam(player_id=player_id[0], chat_id=chat_id) for player_id in player_ids]
 
             draft.state = 1
             session.add_all(teams)
 
-            return True, ""
+            return True, "", num_players
     except Exception as e:
         print(f"An error occurred: {e}")
-        return False, "exception"
+        return False, "exception", -1
 
 def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[str], formation:str, session:Session):
     try:
@@ -454,133 +452,18 @@ def end_game_draft(chat_id:int):
         print(f"An error occurred: {e}")
         return False, None, None
 
-class Draft():
-    def __init__(self) -> None:
-        self.players = {}
-        self.num_players = 0
-        self.category = ""
-        self.formation = ["", {}]
-        self.teams = None
-        self.picked_teams = None
-        self.players_ids = []
-        self.start_player_idx = -1
-        self.curr_player_idx = -1
-        self.state = 0
-        self.curr_pos = "p1"
-        self.curr_team_idx = -1
+def cancel_game_draft(chat_id:int ,session:Session):
+    try:
+        with session.begin():
+            game = session.query(Game).filter(Game.chat_id == chat_id).first()
+            draft = session.query(d).filter(d.chat_id == chat_id).first()
 
-    def join_game(self, player:telegram.User):
-        if self.state != 0 or player.id in self.players:
-            return False
-
-        self.players[player.id] = [player, {"p1":None, "p2":None, "p3":None, "p4":None, "p5":None,
-                                            "p6":None, "p7":None, "p8":None, "p9":None, "p10":None,
-                                            "p11":None}]
-        self.players_ids.append(player.id)
-        self.num_players += 1
-
-        return True
-
-    def start_game(self):
-        if self.state != 0 or self.num_players < 2:
-            return False
-
-        self.teams = [""] * (11 + self.num_players)
-        self.picked_teams = [False] * len(self.teams)
-        self.state = 1
-        return True
-
-    def set_game_states(self, category:str, teams:list[str], formation:str) -> tuple[bool, Literal["game error", "no category error", "num of teams error", "formation error", "duplicate teams error", ""]]:
-        if self.state != 1 or self.teams == None:
-            return False, "game error"
-        if not category:
-            return False, "no category error"
-        if len(teams) != (11 + self.num_players):
-            return False, "num of teams error"
-        formation_ = FORMATIONS.get(formation, None)
-        if formation_ == None:
-            return False, "formation error"
-
-        if len(set(teams)) != len(teams):
-            return False, "duplicate teams error"
-
-        self.formation[0] = formation
-        self.formation[1] = formation_
-
-        for i in range(len(teams)):
-            self.teams[i] = teams[i].strip()
-
-        self.category = category
-        self.start_player_idx = 0
-        self.curr_player_idx = 0
-        shuffle(self.players_ids)
-        self.state = 2
-
-        return True, ""
-
-    def add_pos_to_team(self, player:telegram.User, added_player:str) -> tuple[bool, Literal["game_error", "curr_player_error", "picked_team_error", "picked_pos_error", "taken_player_error", "new_pos", "same_pos", "end_game"]]:
-        if self.state != 2 or (not player.id in self.players) or self.picked_teams == None:
-            return False, "game_error"
-
-        if self.players_ids[self.curr_player_idx] != player.id:
-            return False, "curr_player_error"
-
-        if self.picked_teams[self.curr_team_idx]:
-            return False, "picked_team_error"
-
-        player_ = self.players[player.id]
-        if player_[1][self.curr_pos] != None:
-            return False, "picked_pos_error"
-
-        if added_player.lower() in [
-            value
-            for player in self.players.values() 
-            for value in player[1].values()
-        ]:
-            return False, "taken_player_error"
-
-        player_[1][self.curr_pos] = added_player.lower()
-        if self.curr_player_idx == (self.start_player_idx + self.num_players - 1) % self.num_players:
-            if self.curr_pos == "p11":
-                self.state = 3
-                return True, "end_game"
-
-            self.start_player_idx = (self.start_player_idx + 1) % self.num_players
-            self.picked_teams[self.curr_team_idx] = True
-            self.curr_pos = "p" + f"{int(self.curr_pos[1]) + 1}" if len(self.curr_pos) == 2 else  "p" + f"{int(self.curr_pos[1:3]) + 1}"
-            return True, "new_pos"
-
-        self.curr_player_idx = (self.curr_player_idx + 1) % self.num_players
-        return True, "same_pos"
-
-    def rand_team(self, player_id):
-        if self.state != 2 or self.picked_teams == None or self.teams == None:
-            return ""
-
-        if player_id != self.players_ids[self.start_player_idx]:
-            return ""
-
-        self.curr_team_idx = randint(0, len(self.teams) - 1)
-        while self.picked_teams[self.curr_team_idx]:
-            self.curr_team_idx = randint(0, len(self.teams) - 1)
-
-        return self.teams[self.curr_team_idx]
-
-    def end_game(self, votes:dict[int, int]):
-        if self.state != 3:
-            return []
-
-        max_vote = float("-inf")
-        max_vote_ids = []
-        for id, vote_count in votes.items():
-            if vote_count > max_vote:
-                max_vote = vote_count
-                max_vote_ids.clear()
-                max_vote_ids.append(id)
-            elif vote_count == max_vote:
-                max_vote_ids.append(id)
-
-        return [self.players[x] for x in max_vote_ids]
+            session.delete(game)
+            session.delete(draft)
+            return True
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False
 
 WILTY_ROUNDS = {
     0:"none",
@@ -944,8 +827,7 @@ class GuessThePlayer:
         self.winner_id = -1
         return scores, winners
 
-
-games:dict[int, Optional[Union[GuessThePlayer, Draft, Wilty]]] = {}
+games:dict[int, Optional[Union[GuessThePlayer, Wilty]]] = {}
 
 
 def jaro_winkler_similarity(s1: str, s2: str) -> float:

@@ -27,13 +27,10 @@ class Draft(Base):
     category: Mapped[str] = mapped_column(String(50), nullable=True)
     formation_name: Mapped[str] = mapped_column(String(8), nullable=True)
 
-    # Cascade delete for related Game (if needed)
     game = relationship("Game", uselist=False, cascade="all, delete-orphan")
 
-    # Cascade delete for related DraftPlayers
     players = relationship("DraftPlayer", backref="draft", foreign_keys="DraftPlayer.draft_id", cascade="all, delete-orphan")
 
-    # Cascade delete through association table for Teams
     teams = relationship("Team", secondary=draft_team_association, back_populates="drafts", cascade="all")
 
     current_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL"), nullable=True)
@@ -54,7 +51,6 @@ class DraftPlayer(Base):
     picking: Mapped[bool] = mapped_column(Boolean, default=False)
     time_join: Mapped[datetime] = mapped_column(TIMESTAMP, default=func.now())
 
-    # Cascade delete for related DraftPlayerTeam
     team = relationship("DraftPlayerTeam", uselist=False, backref="player", cascade="all, delete-orphan")
 
     __table_args__ = (
@@ -71,7 +67,6 @@ class Team(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     
-    # Cascade delete through association table for Drafts
     drafts = relationship("Draft", secondary=draft_team_association, back_populates="teams", cascade="all")
 
 

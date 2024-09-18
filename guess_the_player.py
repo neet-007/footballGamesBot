@@ -4,7 +4,7 @@ from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram._inline.inlinekeyboardmarkup import InlineKeyboardMarkup
 import telegram.ext
 from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
-from shared import Draft, Wilty, games, GuessThePlayer, remove_jobs
+from shared import Wilty, games, GuessThePlayer, remove_jobs
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
 from collections import deque
@@ -31,7 +31,7 @@ async def handle_guess_the_player_join_command(update: telegram.Update, context:
     if not update.message or not update.effective_chat or not update.effective_user:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_guess_the_player")
     if not isinstance(game, GuessThePlayer):
@@ -49,7 +49,7 @@ async def handle_guess_the_player_reapting_join_job(context: telegram.ext.Contex
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None:
         return await context.bot.send_message(text="there is no game start one first /new_guess_the_player", chat_id=context.job.chat_id)
     if not isinstance(game, GuessThePlayer):
@@ -67,7 +67,7 @@ async def handle_guess_the_player_join_game_callback(update: telegram.Update, co
     q = update.callback_query
     await q.answer()
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await context.bot.send_message(text="there is no game start one first /new_guess_the_player", chat_id=update.effective_chat.id)
     if not isinstance(game, GuessThePlayer):
@@ -85,7 +85,7 @@ async def handle_guess_the_player_start_game_job(context: telegram.ext.ContextTy
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None or not isinstance(game, GuessThePlayer) or game.state != 0:
         return
 
@@ -110,7 +110,7 @@ async def handle_guess_the_player_start_game_command(update: telegram.Update, co
     if not update.message or not update.effective_chat:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_guess_the_player")
     if not isinstance(game, GuessThePlayer):
@@ -148,7 +148,7 @@ async def handle_guess_the_player_start_round(update: telegram.Update, context: 
     print("chat list found", chat_id_list)
     chat_id = chat_id_list.pop()
     print("chat id", chat_id)
-    game:GuessThePlayer | Draft | Wilty | None = games.get(chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(chat_id, None)
     if game == None:
         return await update.message.reply_text("create game at a group first")
     if not isinstance(game, GuessThePlayer):
@@ -188,7 +188,7 @@ async def handle_guess_the_player_ask_question_command(update: telegram.Update, 
     if not update.message or not update.message.text or not update.effective_chat or not update.effective_user or not context.job_queue or not update.message.text:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_guess_the_player")
     if not isinstance(game, GuessThePlayer):
@@ -213,7 +213,7 @@ async def handle_guess_the_player_answer_question_command(update: telegram.Updat
     if not update.message or not update.message.reply_to_message or not update.message.reply_to_message.from_user or not update.message.text or not update.effective_chat or not update.effective_user or not context.job_queue or not update.message.reply_to_message.text:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_guess_the_player")
     if not isinstance(game, GuessThePlayer):
@@ -246,7 +246,7 @@ async def handle_guess_the_player_proccess_answer_command(update: telegram.Updat
         return
 
     print("if passed")
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_guess_the_player")
     if not isinstance(game, GuessThePlayer):
@@ -285,7 +285,7 @@ async def handle_guess_the_player_end_round_job(context: telegram.ext.ContextTyp
         return
 
     print("if passed")
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None:
         return await context.bot.send_message(text="there is no game start one first /new_guess_the_player", chat_id=context.job.chat_id)
     if not isinstance(game, GuessThePlayer):
@@ -319,7 +319,7 @@ async def handle_guess_the_player_end_game_job(context: telegram.ext.ContextType
         return
 
     print("if passed")
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None:
         return await context.bot.send_message(text="there is no game start one first /new_guess_the_player", chat_id=context.job.chat_id)
     if not isinstance(game, GuessThePlayer):
@@ -338,7 +338,7 @@ async def handle_guess_the_player_leave_game(update: telegram.Update, context: t
     if not update.message or not update.effective_chat or not update.effective_user or not context.job_queue:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_guess_the_player")
     if not isinstance(game, GuessThePlayer):
@@ -362,7 +362,7 @@ async def handle_guess_the_player_cancel_game(update: telegram.Update, context: 
     if not update.message or not update.effective_chat:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_guess_the_player")
     if not isinstance(game, GuessThePlayer):
@@ -380,7 +380,7 @@ async def handle_guess_the_player_get_questions(update: telegram.Update, context
     if not update.message or not update.effective_chat:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_guess_the_player")
     if not isinstance(game, GuessThePlayer):

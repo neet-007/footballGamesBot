@@ -2,7 +2,7 @@ import telegram
 from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram._inline.inlinekeyboardmarkup import InlineKeyboardMarkup
 import telegram.ext
-from shared import WILTY_ROUNDS, Draft, GuessThePlayer, Wilty, games, remove_jobs
+from shared import WILTY_ROUNDS, GuessThePlayer, Wilty, games, remove_jobs
 from datetime import datetime
 
 async def handle_wilty_start_command(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
@@ -28,7 +28,7 @@ async def handle_wilty_join_command(update: telegram.Update, context: telegram.e
     if not update.message or not update.effective_chat or not update.effective_user:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_wilty")
     if not isinstance(game, Wilty):
@@ -46,7 +46,7 @@ async def handle_wilty_reapting_join_job(context: telegram.ext.ContextTypes.DEFA
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None:
         return await context.bot.send_message(text="there is no game start one first /new_wilty", chat_id=context.job.chat_id)
     if not isinstance(game, Wilty):
@@ -61,7 +61,7 @@ async def handle_wilty_join_game_callback(update: telegram.Update, context: tele
     q = update.callback_query
     await q.answer()
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await context.bot.send_message(text="there is no game start one first /new_wilty", chat_id=update.effective_chat.id)
     if not isinstance(game, Wilty):
@@ -79,7 +79,7 @@ async def handle_wilty_start_game_job(context: telegram.ext.ContextTypes.DEFAULT
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None or not isinstance(game, Wilty) or game.state != 0:
         return
 
@@ -109,7 +109,7 @@ async def handle_wilty_get_statements(update: telegram.Update, context: telegram
     if chat_id == None:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(chat_id, None)
     if game == None or not isinstance(game, Wilty):
         return
     if game.state != 1:
@@ -140,7 +140,7 @@ async def handle_wilty_get_mod_statement(update: telegram.Update, context: teleg
     if chat_id == None:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(chat_id, None)
     if game == None or not isinstance(game, Wilty):
         return
     if game.state != 1:
@@ -164,7 +164,7 @@ async def handle_wilty_reapting_vote_job(context: telegram.ext.ContextTypes.DEFA
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None:
         return await context.bot.send_message(text="there is no game start one first /new_wilty", chat_id=context.job.chat_id)
     if not isinstance(game, Wilty):
@@ -176,7 +176,7 @@ async def handle_wilty_start_vote_job(context: telegram.ext.ContextTypes.DEFAULT
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None or not isinstance(game, Wilty) or game.state != 0 or not context.job_queue:
         return
 
@@ -208,7 +208,7 @@ async def handle_wilty_recive_vote_job(update: telegram.Update, context: telegra
     except KeyError:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None or not isinstance(game, Wilty) or game.state != 0 or not context.job_queue:
         return
 
@@ -221,7 +221,7 @@ async def handle_wilty_end_vote_job(context: telegram.ext.ContextTypes.DEFAULT_T
         return
 
     answers = context.job.data["answers"]
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None or not isinstance(game, Wilty) or game.state != 0:
         return
 
@@ -244,7 +244,7 @@ async def handle_wilty_end_round_job(context: telegram.ext.ContextTypes.DEFAULT_
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None or not isinstance(game, Wilty) or game.state != 0:
         return
 
@@ -264,7 +264,7 @@ async def handle_wilty_end_game_job(context: telegram.ext.ContextTypes.DEFAULT_T
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(context.job.chat_id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(context.job.chat_id, None)
     if game == None or not isinstance(game, Wilty) or game.state != 0:
         return
 
@@ -283,7 +283,7 @@ async def handle_wilty_cancel_game(update: telegram.Update, context: telegram.ex
     if not update.message or not update.effective_chat:
         return
 
-    game:GuessThePlayer | Draft | Wilty | None = games.get(update.effective_chat.id, None)
+    game:GuessThePlayer  | Wilty | None = games.get(update.effective_chat.id, None)
     if game == None:
         return await update.message.reply_text("there is no game start one first /new_guess_the_player")
     if not isinstance(game, Wilty):
