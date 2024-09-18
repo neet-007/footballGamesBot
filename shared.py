@@ -202,7 +202,6 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
 
             game.category = category
             
-            #do this
             player = (
                 session.query(DraftPlayer)
                 .filter(DraftPlayer.draft_id == chat_id)
@@ -215,8 +214,6 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
             player_id_ = player.player_id
             game.current_player_id = player.id
             game.picking_player_id = player.id
-            #self.curr_player_idx = 0
-            #shuffle(self.players_ids)
 
             game.state = 2
             other = [game.category, game.formation_name, " ".join([team.name for team in game.teams]), player_id_]
@@ -245,13 +242,11 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
             if game.current_player_id != player.id:
                 return False, "curr_player_error", [None, None, None, None]
 
-            #this is not right
             curr_team = session.execute(draft_team_association.select().filter(draft_team_association.c.draft_id == chat_id,
                                                                       draft_team_association.c.team_id == game.curr_team_id)).first()
             if not curr_team or curr_team.picked:
                 return False, "picked_team_error", [None, None, None, None]
 
-            #this also not right
             player_team = session.query(DraftPlayerTeam).filter(
                 DraftPlayerTeam.player_id == player.id,
             ).first()
@@ -423,6 +418,7 @@ def end_game_draft(chat_id:int):
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
+            draft = session.query(d).filter(d.chat_id == chat_id).first()
             formation = session.query(d.formation_name).filter(d.chat_id == chat_id).first()
             query_results = (
                 session.query(
@@ -447,10 +443,12 @@ def end_game_draft(chat_id:int):
             ]
             if not game or not players or not formation:
                 session.delete(game)
+                session.delete(draft)
                 return False , None, None
 
             formation = formation[0]
             session.delete(game)
+            session.delete(draft)
             return True, teams, formation
     except Exception as e:
         print(f"An error occurred: {e}")

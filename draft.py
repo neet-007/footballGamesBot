@@ -684,25 +684,24 @@ async def handle_test_draft_end_votes_job(context: telegram.ext.ContextTypes.DEF
         player = await context.bot.get_chat_member(chat_id=chat_id, user_id=id)
         players.append(player.user.full_name)
 
-    print(players_and_teams, players)
     username_to_id = {players[i]:players_and_teams[i][0] for i in range(len(players))}
     votes = {username_to_id[username]:count for username, count in votes.items()}
 
+    print(votes)
     max_vote = float("-inf")
     max_vote_ids = []
     for id, vote_count in votes.items():
+        print(id, vote_count)
         if vote_count > max_vote:
             max_vote = vote_count
             max_vote_ids.clear()
             max_vote_ids.append((id, vote_count))
         elif vote_count == max_vote:
             max_vote_ids.append((id, vote_count))
-    print(max_vote_ids)
     for i, id in enumerate(max_vote_ids):
         winner = await context.bot.get_chat_member(chat_id=chat_id, user_id=id[0])
         max_vote_ids[i] = (winner.user, players_and_teams[i][1])
 
-    print(max_vote_ids)
     del context.bot_data[f"poll_{poll_id}"]
     await context.bot.stop_poll(chat_id=chat_id, message_id=poll_data["message_id"])
     data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
