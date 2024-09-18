@@ -466,6 +466,18 @@ def cancel_game_draft(chat_id:int ,session:Session):
         print(f"An error occurred: {e}")
         return False
 
+def check_guess_the_player(chat_id:int):
+    try:
+        with session.begin():
+            game = session.query(gp.state, gp.num_players).filter(gp.chat_id == chat_id).first()
+            if not game:
+                return False, -1, -1
+
+            return True, game[0], game[1]
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, -1, -1
+
 def new_game_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():

@@ -4,7 +4,7 @@ from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram._inline.inlinekeyboardmarkup import InlineKeyboardMarkup
 import telegram.ext
 from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
-from shared import Wilty, games, GuessThePlayer, remove_jobs
+from shared import Wilty, check_guess_the_player, games, GuessThePlayer, join_game_guess_the_player, new_game_guess_the_player, remove_jobs, session
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
 from collections import deque
@@ -396,10 +396,81 @@ async def handle_guess_the_player_get_questions(update: telegram.Update, context
 
     await update.message.reply_text(f"the questions are\n{text}")
 
-       
+async def handle_test_guess_the_player_new_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_chat or not context.job_queue:
+        return
 
-guess_the_player_new_game_command_handler = CommandHandler("new_guess_the_player", handle_guess_the_player_new_game)
-guess_the_player_join_game_command_handler = CommandHandler("join_guess_the_player", handle_guess_the_player_join_command)
+    if update.effective_chat.id in games:
+        return await update.message.reply_text("a game has already started")
+
+    res, status = new_game_guess_the_player(update.effective_chat.id, session)
+    if not res:
+        return await update.message.reply_text(status)
+
+    data = {"chat_id":update.effective_chat.id, "time":datetime.now()}
+    context.job_queue.run_repeating(handle_test_guess_the_player_reapting_join_job, data=data, interval=20, first=10,
+                                    chat_id=update.effective_chat.id, name="guess_the_player_reapting_join_job")
+    context.job_queue.run_once(handle_guess_the_player_start_game_job, when=60, data=data, chat_id=update.effective_chat.id,
+                               name="guess_the_player_start_game_job")
+    
+    await update.message.reply_text("a game has started you can join with the join command /join_guess_the_player or click the button\n/start_game_guess_the_player to start game\ngame starts after 1 minute"
+                                    , reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text="join", callback_data="guess_the_player_join")]]))
+
+async def handle_test_guess_the_player_join_command(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_chat or not update.effective_user:
+        return
+
+    res, status = join_game_guess_the_player(update.effective_chat.id, update.effective_user.id, session)
+    if not res:
+        if status == "no game":
+            return await update.message.reply_text("there is no game start one first /new_guess_the_player")
+        elif status== "player already in game":
+            return await update.message.reply_text(f"player f{update.effective_user.mention_html()} has already joined the game",
+                                                   parse_mode=telegram.constants.ParseMode.HTML)
+        else:
+            return await update.message.reply_text(status)
+ 
+    await update.message.reply_text(f"player {update.effective_user.mention_html()} has joined the game",
+                                    parse_mode=telegram.constants.ParseMode.HTML)
+
+async def handle_test_guess_the_player_reapting_join_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
+        return
+
+    res, _, _= check_guess_the_player(context.job.chat_id)
+    if not res:
+        return await context.bot.send_message(text="there is no game start one first /new_guess_the_player", chat_id=context.job.chat_id)
+
+    await context.bot.send_message(
+        chat_id=context.job.chat_id, 
+        text=f"Remaining time to join: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+    )
+
+async def handle_test_guess_the_player_join_game_callback(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.callback_query or not update.effective_chat or not update.effective_user:
+        return
+
+    q = update.callback_query
+    await q.answer()
+
+    res, status = join_game_guess_the_player(update.effective_chat.id, update.effective_user.id, session)
+    if not res:
+        if status == "no game":
+            return await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                  text="there is no game start one first /new_guess_the_player")
+        elif status== "player already in game":
+            return await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                  text=f"player f{update.effective_user.mention_html()} has already joined the game",
+                                                   parse_mode=telegram.constants.ParseMode.HTML)
+        else:
+            return await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                  text=status)
+
+    await context.bot.send_message(text=f"player {update.effective_user.mention_html()} has joined the game", chat_id=update.effective_chat.id,
+                                   parse_mode=telegram.constants.ParseMode.HTML)
+
+guess_the_player_new_game_command_handler = CommandHandler("new_guess_the_player", handle_test_guess_the_player_new_game)
+guess_the_player_join_game_command_handler = CommandHandler("join_guess_the_player", handle_test_guess_the_player_join_command)
 guess_the_player_start_game_command_handler = CommandHandler("start_game_guess_the_player", handle_guess_the_player_start_game_command)
 guess_the_player_ask_question_command_handler = CommandHandler("ask_q_guess_the_player", handle_guess_the_player_ask_question_command)
 guess_the_player_proccess_answer_command_handler = MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_guess_the_player_proccess_answer_command)
@@ -410,4 +481,4 @@ guess_the_player_answer_question_command_handler = MessageHandler((telegram.ext.
                                                                   handle_guess_the_player_answer_question_command)
 guess_the_player_start_round_command_handler = MessageHandler((telegram.ext.filters.TEXT & ~telegram.ext.filters.REPLY &~ telegram.ext.filters.COMMAND),
                                                              handle_guess_the_player_start_round)
-guess_the_player_join_game_callback_handler = CallbackQueryHandler(handle_guess_the_player_join_game_callback, pattern="^guess_the_player_join$")
+guess_the_player_join_game_callback_handler = CallbackQueryHandler(handle_test_guess_the_player_join_game_callback, pattern="^guess_the_player_join$")
