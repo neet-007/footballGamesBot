@@ -753,7 +753,7 @@ def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str):
                 guess_the_player.winning_player_id = None
                 return True, "all players muted"
 
-            return True, ""
+            return True, "false"
     except Exception as e:
         print(f"An error occurred: {e}")
         return False, "exception"
@@ -768,11 +768,12 @@ def end_round_guess_the_player(chat_id:int):
             if guess_the_player.state != 3:
                 return False, "game error", -1
 
+            print(guess_the_player.winning_player_id)
             if guess_the_player.winning_player_id == None:
                 curr_player = (
                         session.query(GuessThePlayerPlayer)
                         .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id,
-                                GuessThePlayerPlayer.player_id == guess_the_player.current_player_id)
+                                GuessThePlayerPlayer.id == guess_the_player.current_player_id)
                         .first()
                 )
                 if not curr_player:
@@ -845,7 +846,7 @@ def end_game_guess_the_player(chat_id:int):
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
             guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
             if not guess_the_player:
-                return False, "a game has started", {}, ""
+                return False, "a game has started", {}, []
 
             players = (
                 session.query(GuessThePlayerPlayer)
@@ -854,22 +855,22 @@ def end_game_guess_the_player(chat_id:int):
             )
 
             scores = {player.player_id:player.score for player in players}
-            winners = ""
+            winners = []
             max_score = float('-inf')
             for player, score in scores.items():
                 if score == max_score:
-                    winners += f"{player}\n"
+                    winners.append(player)
                 if score > max_score:
                     max_score = score
-                    winners = ""
-                    winners += f"{player}\n"
+                    winners = []
+                    winners.append(player)
 
             session.delete(game)
             session.delete(guess_the_player)
             return True, "", scores, winners
     except Exception as e:
         print(f"An error occurred: {e}")
-        return False, "exception", {}, ""
+        return False, "exception", {}, []
 
 def cancel_game_guess_the_player(chat_id:int):
     try:

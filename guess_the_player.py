@@ -224,7 +224,7 @@ async def handle_test_guess_the_player_proccess_answer_command(update: telegram.
         if err == "muted player":
             return
         else:
-            return await update.message.reply_text("game error game aborted")
+            return await update.message.reply_text(err)
     
     if err == "false":
         return await update.message.reply_text("the answer is wrong")
@@ -235,7 +235,7 @@ async def handle_test_guess_the_player_proccess_answer_command(update: telegram.
         context.job_queue.run_once(handle_test_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id)
         return await update.message.reply_text("you have lost")
     else:
-        return await update.message.reply_text("game error game aborted")
+        return await update.message.reply_text(err)
 
 async def handle_test_guess_the_player_end_round_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not context.job_queue:
@@ -268,12 +268,19 @@ async def handle_test_guess_the_player_end_game_job(context: telegram.ext.Contex
     res, err, scores, winners = end_game_guess_the_player(context.job.chat_id)
     if not res:
         return await context.bot.send_message(text=err, chat_id=context.job.chat_id, parse_mode=telegram.constants.ParseMode.HTML)
+
     text = ""
+    winners_text = ""
     for player_id, score in scores.items():
         player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=player_id)
         text += f"{player.user.mention_html()}:{score}\n"
 
-    return await context.bot.send_message(text=f"scores:\n{text}\nwinners:\n{winners}", chat_id=context.job.chat_id, parse_mode=telegram.constants.ParseMode.HTML)
+    for player_id in winners:
+        print(player_id)
+        player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=player_id)
+        winners_text += f"{player.user.mention_html()}\n"
+
+    return await context.bot.send_message(text=f"scores:\n{text}\nwinners:\n{winners_text}", chat_id=context.job.chat_id, parse_mode=telegram.constants.ParseMode.HTML)
 
 async def handle_dispatch_messages(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     print("dispatch")
