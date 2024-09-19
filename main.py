@@ -5,8 +5,8 @@ import telegram
 import telegram.ext
 from telegram.ext._handlers.messagehandler import MessageHandler
 from draft import random_team_draft_game_callback_handler, make_game_test_handler, join_game_test_handler, start_game_test_handler, set_game_test_handler, position_draft_message_test_handler, cancel_game_test_handler, vote_recive_poll_answer_test_handler, end_vote_game_test_handler, join_game_callback_test_handler, start_vote_game_test_handler
-from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_answer_question_command_handler, guess_the_player_proccess_answer_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_start_round_command_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_guess_the_player_answer_question_command, handle_guess_the_player_ask_question_command, handle_guess_the_player_proccess_answer_command, handle_guess_the_player_start_round
-from shared import  GuessThePlayer, Wilty, games
+from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_dispatch_messages
+from shared import Wilty, games
 from fastapi import FastAPI, Request, Response 
 
 load_dotenv()
@@ -57,7 +57,7 @@ async def handle_start(update: telegram.Update, context: telegram.ext.ContextTyp
 
     await update.message.reply_text("")
 
-async def handle_dispatch_messages(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+async def handle_dispatch_messages_(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     print("dispatch")
     if not update.message or not update.message.text or not update.effective_chat or not update.effective_user:
         return
@@ -77,17 +77,6 @@ async def handle_dispatch_messages(update: telegram.Update, context: telegram.ex
         return
 
     print("game found")
-    if isinstance(game, GuessThePlayer):
-        print("is guess the player")
-        if update.effective_chat.type == "private":
-            print("private")
-            return await handle_guess_the_player_start_round(update, context)
-        if update.message.reply_to_message:
-            print("is reply")
-            return await handle_guess_the_player_answer_question_command(update, context)
-        else:
-            print("else")
-            return await handle_guess_the_player_proccess_answer_command(update, context)
     if isinstance(game, Wilty):
         print("wilty")
         return
@@ -108,16 +97,16 @@ ptb.add_handler(guess_the_player_cancel_game_command_handler)
 ptb.add_handler(guess_the_player_leave_game_command_handler)
 ptb.add_handler(guess_thE_player_get_questions_command_handler)
 
-ptb.add_handler(make_game_test_handler)
-ptb.add_handler(join_game_test_handler)
-ptb.add_handler(start_game_test_handler)
-ptb.add_handler(set_game_test_handler)
-ptb.add_handler(cancel_game_test_handler)
-ptb.add_handler(end_vote_game_test_handler)
-ptb.add_handler(start_vote_game_test_handler)
-ptb.add_handler(vote_recive_poll_answer_test_handler)
-ptb.add_handler(join_game_callback_test_handler)
-ptb.add_handler(random_team_draft_game_callback_handler)
-ptb.add_handler(position_draft_message_test_handler)
-#ptb.add_handler(MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_dispatch_messages))
+#ptb.add_handler(make_game_test_handler)
+#ptb.add_handler(join_game_test_handler)
+#ptb.add_handler(start_game_test_handler)
+#ptb.add_handler(set_game_test_handler)
+#ptb.add_handler(cancel_game_test_handler)
+#ptb.add_handler(end_vote_game_test_handler)
+#ptb.add_handler(start_vote_game_test_handler)
+#ptb.add_handler(vote_recive_poll_answer_test_handler)
+#ptb.add_handler(join_game_callback_test_handler)
+#ptb.add_handler(random_team_draft_game_callback_handler)
+#ptb.add_handler(position_draft_message_test_handler)
+ptb.add_handler(MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_dispatch_messages))
 
