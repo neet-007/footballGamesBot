@@ -64,7 +64,6 @@ def get_vote_data(chat_id:int):
 def new_game_draft(chat_id: int, session: Session):
     try:
         with session.begin():
-            new_db()
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
             if game:
                 return False, "a game has started"

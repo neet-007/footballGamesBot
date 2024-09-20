@@ -1,3 +1,4 @@
+from sqlalchemy import update
 import telegram
 from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram._inline.inlinekeyboardmarkup import InlineKeyboardMarkup
@@ -26,8 +27,10 @@ async def handle_test_make_game(update: telegram.Update, context: telegram.ext.C
         return await update.message.reply_text(err)
 
     data = {"game_id":update.effective_chat.id, "time":datetime.now()}
-    context.job_queue.run_repeating(handle_test_draft_reapting_join_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id, name="draft_reapting_join_job")
-    context.job_queue.run_once(handle_test_draft_start_game_job, when=60, data=data, chat_id=update.effective_chat.id, name="draft_start_game_job")
+    context.job_queue.run_repeating(handle_test_draft_reapting_join_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id,
+                                    name=f"draft_reapting_join_job_{update.effective_chat.id}")
+    context.job_queue.run_once(handle_test_draft_start_game_job, when=60, data=data, chat_id=update.effective_chat.id,
+                               name=f"draft_start_game_job_{update.effective_chat.id}")
     await update.message.reply_text(text="a game has started /test_join or press the button", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(text="join game", callback_data="draft_join")]
         ]
@@ -53,14 +56,16 @@ async def handle_test_draft_start_game_job(context: telegram.ext.ContextTypes.DE
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
-    remove_jobs("draft_reapting_join_job", context)
+    remove_jobs(f"draft_reapting_join_job_{context.job.chat_id}", context)
     res, err, num_players = start_game_draft(context.job.chat_id, session)
     if not res:
         return await context.bot.send_message(text=err, chat_id=context.job.chat_id)
 
     data = {"game_id":context.job.chat_id, "time":datetime.now()}
-    context.job_queue.run_repeating(handle_draft_reapting_statement_job, interval=20, first=10, data=data, chat_id=context.job.chat_id, name="draft_reapting_statement_job")
-    context.job_queue.run_once(handle_test_draft_set_state_command_job, when=60, data=data, chat_id=context.job.chat_id, name="draft_set_state_command_job")
+    context.job_queue.run_repeating(handle_test_draft_reapting_statement_job, interval=20, first=10, data=data, chat_id=context.job.chat_id,
+                                    name=f"draft_reapting_statement_job_{context.job.chat_id}")
+    context.job_queue.run_once(handle_test_draft_set_state_command_job, when=60, data=data, chat_id=context.job.chat_id,
+                               name=f"draft_set_state_command_job_{context.job.chat_id}")
     
     await context.bot.send_message(text=f"the game has started decide the category, teams and formations\n then the admin should send as /test_set category, teams,teams should be separated by - and the number of teams must be {11 + num_players} formations in that order with commas\n supported formations are 442 443 4231 352 532 in this foramt",
                                    chat_id=context.job.chat_id)
@@ -100,8 +105,10 @@ async def handle_test_start_game(update: telegram.Update, context: telegram.ext.
         await update.message.reply_text(err)
 
     data = {"game_id":update.effective_chat.id, "time":datetime.now()}
-    context.job_queue.run_repeating(handle_test_draft_reapting_statement_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id, name="draft_reapting_statement_job")
-    context.job_queue.run_once(handle_test_draft_set_state_command_job, when=30, data=data, chat_id=update.effective_chat.id, name="draft_set_state_command_job")
+    context.job_queue.run_repeating(handle_test_draft_reapting_statement_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id,
+                                    name=f"draft_reapting_statement_job_{update.effective_chat.id}")
+    context.job_queue.run_once(handle_test_draft_set_state_command_job, when=30, data=data, chat_id=update.effective_chat.id,
+                               name=f"draft_set_state_command_job_{update.effective_chat.id}")
 
     await update.message.reply_text(f"the game has started decide the category, teams and formations\n then the admin should send as /test_set category, teams,teams should be separated by - and the number of teams must be {11 + num_players} formations in that order with commas\n supported formations are 442 443 4231 352 532 in this foramt")
 
@@ -123,7 +130,7 @@ async def handle_test_draft_set_state_command_job(context: telegram.ext.ContextT
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    remove_jobs("draft_reapting_statement_job", context)
+    remove_jobs(f"draft_reapting_statement_job_{context.job.chat_id}", context)
     res, state, num_players = check_draft(context.job.chat_id)
     if not res or state != 1:
         return
@@ -217,8 +224,10 @@ async def handle_test_draft_add_pos(update: telegram.Update, context: telegram.e
             return await update.message.reply_text("error happend")
 
         data = {"game_id":update.effective_chat.id, "time":datetime.now()}
-        context.job_queue.run_repeating(handle_test_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id, name="draft_reapting_votes_job")
-        context.job_queue.run_once(handle_test_draft_set_votes_job, when=30, data=data, chat_id=update.effective_chat.id, name="draft_set_votes_job")
+        context.job_queue.run_repeating(handle_test_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id,
+                                        name=f"draft_reapting_votes_job_{update.effective_chat.id}")
+        context.job_queue.run_once(handle_test_draft_set_votes_job, when=30, data=data, chat_id=update.effective_chat.id,
+                                   name=f"draft_set_votes_job_{update.effective_chat.id}")
         teams = []
         for player_id, team in other[3]:
             player = await update.effective_chat.get_member(player_id)
@@ -248,8 +257,8 @@ async def handle_test_draft_start_votes_command(update: telegram.Update, context
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue:
         return
     
-    remove_jobs("draft_reapting_votes_job", context)
-    remove_jobs("draft_reapting_votes_end_job", context)
+    remove_jobs(f"draft_reapting_votes_job_{update.effective_chat.id}", context)
+    remove_jobs(f"draft_reapting_votes_end_job_{update.effective_chat.id}", context)
     chat_id = update.effective_chat.id
     res, state, players_ids = get_vote_data(chat_id)
     if not res or state != 3 or not players_ids:
@@ -276,8 +285,10 @@ async def handle_test_draft_start_votes_command(update: telegram.Update, context
     context.bot_data[f"poll_{message.poll.id}"] = poll_data
     context.bot_data[f"poll_{chat_id}"] = poll_data
     data = {"game_id":chat_id, "time":datetime.now(), "poll_id":message.poll.id}
-    context.job_queue.run_repeating(handle_test_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id, name="draft_reapting_votes_end_job")
-    context.job_queue.run_once(handle_test_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,name="draft_end_votes_job")
+    context.job_queue.run_repeating(handle_test_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id,
+                                    name=f"draft_reapting_votes_end_job_{update.effective_chat.id}")
+    context.job_queue.run_once(handle_test_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,
+                               name=f"draft_end_votes_job_{update.effective_chat.id}")
 
 async def handle_test_draft_reapting_votes_end_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
@@ -296,8 +307,8 @@ async def handle_test_draft_set_votes_job(context: telegram.ext.ContextTypes.DEF
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
-    remove_jobs("draft_reapting_votes_job", context)
-    remove_jobs("draft_reapting_votes_end_job", context)
+    remove_jobs(f"draft_reapting_votes_job_{context.job.chat_id}", context)
+    remove_jobs(f"draft_reapting_votes_end_job_{context.job.chat_id}", context)
     chat_id = context.job.data["game_id"]
     res, state, players_ids = get_vote_data(chat_id)
     if not res or state != 3 or not players_ids:
@@ -325,8 +336,10 @@ async def handle_test_draft_set_votes_job(context: telegram.ext.ContextTypes.DEF
     context.bot_data[f"poll_{chat_id}"] = poll_data
     print(context.bot_data)
     data = {"game_id":chat_id, "time":datetime.now(), "poll_id":message.poll.id}
-    context.job_queue.run_repeating(handle_test_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id, name="draft_reapting_votes_end_job")
-    context.job_queue.run_once(handle_test_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,name="draft_end_votes_job")
+    context.job_queue.run_repeating(handle_test_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id,
+                                    name=f"draft_reapting_votes_end_job_{context.job.chat_id}")
+    context.job_queue.run_once(handle_test_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,
+                               name=f"draft_end_votes_job_{context.job.chat_id}")
 
 async def handle_test_draft_vote_recive(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     print("here")
@@ -350,18 +363,19 @@ async def handle_test_draft_vote_recive(update: telegram.Update, context: telegr
     poll_data["answers"] += 1
 
     if poll_data["answers"] == num_players:
-        remove_jobs("draft_reapting_votes_job", context)
-        remove_jobs("draft_end_votes_job", context)
+        remove_jobs(f"draft_reapting_votes_job_{chat_id}", context)
+        remove_jobs(f"draft_end_votes_job_{chat_id}", context)
         #await context.bot.stop_poll(chat_id=chat_id, message_id=poll_data["message_id"])
         data = {"game_id":chat_id, "time":datetime.now(), "poll_id":update.poll_answer.poll_id}
-        context.job_queue.run_once(handle_test_draft_end_votes_job, when=0, data=data, chat_id=chat_id ,name="draft_end_votes_job")
+        context.job_queue.run_once(handle_test_draft_end_votes_job, when=0, data=data, chat_id=chat_id ,
+                                   name=f"draft_end_votes_job_{chat_id}")
 
 async def handle_test_draft_end_votes_command(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue:
         return
     
-    remove_jobs("draft_reapting_votes_job", context)
-    remove_jobs("draft_reapting_votes_end_job", context)
+    remove_jobs(f"draft_reapting_votes_job_{update.effective_chat.id}", context)
+    remove_jobs(f"draft_reapting_votes_end_job_{update.effective_chat.id}", context)
     poll_data = context.bot_data[f"poll_{update.effective_chat.id}"]
     chat_id = poll_data["chat_id"]
 
@@ -395,15 +409,16 @@ async def handle_test_draft_end_votes_command(update: telegram.Update, context: 
     del context.bot_data[f"poll_{update.effective_chat.id}"]
     await context.bot.stop_poll(chat_id=chat_id, message_id=poll_data["message_id"])
     data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
-    context.job_queue.run_once(handle_test_draft_end_game_job, when=0, data=data, chat_id=chat_id ,name="draft_end_game_job")
+    context.job_queue.run_once(handle_test_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
+                               name=f"draft_end_game_job_{update.effective_chat.id}")
 
 async def handle_test_draft_end_votes_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
-    remove_jobs("draft_reapting_votes_job", context)
-    remove_jobs("draft_reapting_votes_end_job", context)
     chat_id = context.job.data["game_id"]
+    remove_jobs(f"draft_reapting_votes_job_{chat_id}", context)
+    remove_jobs(f"draft_reapting_votes_end_job_{chat_id}", context)
     
     poll_id = context.job.data["poll_id"]
     poll_data = context.bot_data[f"poll_{poll_id}"]
@@ -438,14 +453,15 @@ async def handle_test_draft_end_votes_job(context: telegram.ext.ContextTypes.DEF
     del context.bot_data[f"poll_{poll_id}"]
     await context.bot.stop_poll(chat_id=chat_id, message_id=poll_data["message_id"])
     data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
-    context.job_queue.run_once(handle_test_draft_end_game_job, when=0, data=data, chat_id=chat_id ,name="draft_end_game_job")
+    context.job_queue.run_once(handle_test_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
+                               name=f"draft_end_game_job_{chat_id}")
 
 async def handle_test_draft_end_game_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
-    remove_jobs("draft_reapting_votes_job", context)
-    remove_jobs("draft_reapting_votes_end_job", context)
+    remove_jobs(f"draft_reapting_votes_job_{context.job.chat_id}", context)
+    remove_jobs(f"draft_reapting_votes_end_job_{context.job.chat_id}", context)
 
     winners = context.job.data["winners"]
     formation = context.job.data["formation"]
@@ -465,14 +481,14 @@ async def handle_test_draft_cancel_game(update: telegram.Update, context: telegr
     if not res:
         return await update.message.reply_text("there is no game please start one first /new_draft")
 
-    remove_jobs("draft_reapting_votes_job", context)
-    remove_jobs("draft_reapting_end_votes_job", context)
-    remove_jobs("draft_end_votes_job", context)
-    remove_jobs("draft_set_votes_job", context)
-    remove_jobs("draft_reapting_join_job", context)
-    remove_jobs("draft_start_game_job", context)
-    remove_jobs("draft_reapting_statement_job", context)
-    remove_jobs("draft_set_statement_command_job", context)
+    remove_jobs(f"draft_reapting_votes_job_{update.effective_chat.id}", context)
+    remove_jobs(f"draft_reapting_end_votes_job_{update.effective_chat.id}", context)
+    remove_jobs(f"draft_end_votes_job_{update.effective_chat.id}", context)
+    remove_jobs(f"draft_set_votes_job_{update.effective_chat.id}", context)
+    remove_jobs(f"draft_reapting_join_job_{update.effective_chat.id}", context)
+    remove_jobs(f"draft_start_game_job_{update.effective_chat.id}", context)
+    remove_jobs(f"draft_reapting_statement_job_{update.effective_chat.id}", context)
+    remove_jobs(f"draft_set_statement_command_job_{update.effective_chat.id}", context)
 
     await update.message.reply_text("game has been canceled")
 
