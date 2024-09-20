@@ -22,9 +22,9 @@ async def handle_test_guess_the_player_new_game(update: telegram.Update, context
 
     data = {"chat_id":update.effective_chat.id, "time":datetime.now()}
     context.job_queue.run_repeating(handle_test_guess_the_player_reapting_join_job, data=data, interval=20, first=10,
-                                    chat_id=update.effective_chat.id, name="guess_the_player_reapting_join_job")
+                                    chat_id=update.effective_chat.id, name=f"guess_the_player_reapting_join_job_{update.effective_chat.id}")
     context.job_queue.run_once(handle_test_guess_the_player_start_game_job, when=60, data=data, chat_id=update.effective_chat.id,
-                               name="guess_the_player_start_game_job")
+                               name=f"guess_the_player_start_game_job_{update.effective_chat.id}")
     
     await update.message.reply_text("a game has started you can join with the join command /join_guess_the_player or click the button\n/start_game_guess_the_player to start game\ngame starts after 1 minute"
                                     , reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text="join", callback_data="guess_the_player_join")]]))
@@ -86,7 +86,7 @@ async def handle_test_guess_the_player_start_game_job(context: telegram.ext.Cont
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    remove_jobs("guess_the_player_reapting_join_job", context)
+    remove_jobs(f"guess_the_player_reapting_join_job_{context.job.chat_id}", context)
     res, err, curr_player_id = start_game_guess_the_player(context.job.chat_id)
     if not res:
         if err == "game error":
@@ -106,8 +106,8 @@ async def handle_test_guess_the_player_start_game_command(update: telegram.Updat
     if not update.message or not update.effective_chat:
         return
 
-    remove_jobs("guess_the_player_reapting_join_job", context)
-    remove_jobs("guess_the_player_start_game_job", context)
+    remove_jobs(f"guess_the_player_reapting_join_job_{update.effective_chat.id}", context)
+    remove_jobs(f"guess_the_player_start_game_job_{update.effective_chat.id}", context)
     res, err, curr_player_id = start_game_guess_the_player(update.effective_chat.id)
     if not res:
         if err == "game error":
@@ -217,10 +217,12 @@ async def handle_test_guess_the_player_proccess_answer_command(update: telegram.
     if err == "false":
         return await update.message.reply_text("the answer is wrong")
     if err == "correct":
-        context.job_queue.run_once(handle_test_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id)
+        context.job_queue.run_once(handle_test_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
+                                   name=f"guess_the_player_end_round_job_{update.effective_chat.id}")
         return await update.message.reply_text("your answer is correct")
     if err == "all players muted":
-        context.job_queue.run_once(handle_test_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id)
+        context.job_queue.run_once(handle_test_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
+                                   name=f"guess_the_player_end_round_job_{update.effective_chat.id}")
         return await update.message.reply_text("you have lost")
     else:
         return await update.message.reply_text(err)
@@ -237,7 +239,8 @@ async def handle_test_guess_the_player_end_round_job(context: telegram.ext.Conte
             return await context.bot.send_message(text=err, chat_id=context.job.chat_id, parse_mode=telegram.constants.ParseMode.HTML)
 
     if err == "game end":
-        context.job_queue.run_once(handle_test_guess_the_player_end_game_job, when=0, chat_id=context.job.chat_id)
+        context.job_queue.run_once(handle_test_guess_the_player_end_game_job, when=0, chat_id=context.job.chat_id,
+                                   name=f"guess_the_player_end_game_job_{context.job.chat_id}")
         return await context.bot.send_message(text="the game has ended the results will come now", chat_id=context.job.chat_id)
     if err == "round end":
         curr_player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=curr_player_id)
@@ -292,9 +295,11 @@ async def handle_test_guess_the_player_leave_game(update: telegram.Update, conte
         if err == "player not in game error":
             return
         if err == "end round":
-            context.job_queue.run_once(handle_test_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id)
+            context.job_queue.run_once(handle_test_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
+                                       name=f"guess_the_player_end_round_job_{update.effective_chat.id}")
         if err == "end game":
-            context.job_queue.run_once(handle_test_guess_the_player_end_game_job, when=0, chat_id=update.effective_chat.id)
+            context.job_queue.run_once(handle_test_guess_the_player_end_game_job, when=0, chat_id=update.effective_chat.id,
+                                       name=f"guess_the_player_end_gane_job_{update.effective_chat.id}")
         else:
             return await update.message.reply_text(err)
 
@@ -309,10 +314,10 @@ async def handle_test_guess_the_player_cancel_game(update: telegram.Update, cont
         await update.message.reply_text(err)
 
     #remove from user games
-    remove_jobs("guess_the_player_reapting_join_job", context)
-    remove_jobs("guess_the_player_start_game_job", context)
-    remove_jobs("guess_the_player_end_round_job", context)
-    remove_jobs("guess_the_player_end_game_job", context)
+    remove_jobs(f"guess_the_player_reapting_join_job_{update.effective_chat.id}", context)
+    remove_jobs(f"guess_the_player_start_game_job_{update.effective_chat.id}", context)
+    remove_jobs(f"guess_the_player_end_round_job_{update.effective_chat.id}", context)
+    remove_jobs(f"guess_the_player_end_game_job_{update.effective_chat.id}", context)
     await update.message.reply_text("game cancel")
 
 async def handle_test_guess_the_player_get_questions(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
