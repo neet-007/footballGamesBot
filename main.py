@@ -4,8 +4,9 @@ from os import getenv
 import telegram
 import telegram.ext
 from telegram.ext._handlers.messagehandler import MessageHandler
+from db.connection import new_db
 from draft import random_team_draft_game_callback_handler, make_game_test_handler, join_game_test_handler, start_game_test_handler, set_game_test_handler, position_draft_message_test_handler, cancel_game_test_handler, vote_recive_poll_answer_test_handler, end_vote_game_test_handler, join_game_callback_test_handler, start_vote_game_test_handler
-from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_dispatch_messages
+from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_dispatch_messages, new_db_handler
 from shared import Wilty, games
 from fastapi import FastAPI, Request, Response 
 
@@ -84,7 +85,7 @@ async def handle_dispatch_messages_(update: telegram.Update, context: telegram.e
         print("should be eror")
         return
 
-
+ptb.add_handler(new_db_handler)
 ptb.add_handler(guess_the_player_new_game_command_handler)
 ptb.add_handler(guess_the_player_join_game_command_handler)
 ptb.add_handler(guess_the_player_join_game_callback_handler)

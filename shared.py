@@ -1,10 +1,10 @@
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, insert, or_, select, update
 from sqlalchemy.orm import Session
 import telegram
 import telegram.ext
 from random import shuffle, randint
 from db.connection import get_session, new_db
-from db.models import AskedQuestions, Draft as d, DraftPlayer, DraftPlayerTeam, Game, GuessThePlayerPlayer, Team, draft_team_association, GuessThePlayer as gp
+from db.models import AskedQuestions, Draft as d, DraftPlayer, DraftPlayerTeam, Game, GuessThePlayerPlayer, Team, draft_team_association, GuessThePlayer as GuessThePlayer, guess_the_player_guess_the_player_player_association
 def remove_jobs(name:str, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job_queue:
         return
@@ -468,7 +468,7 @@ def cancel_game_draft(chat_id:int ,session:Session):
 def check_guess_the_player(chat_id:int):
     try:
         with session.begin():
-            game = session.query(gp.state, gp.num_players).filter(gp.chat_id == chat_id).first()
+            game = session.query(GuessThePlayer.state, GuessThePlayer.num_players).filter(GuessThePlayer.chat_id == chat_id).first()
             if not game:
                 return False, -1, -1
 
@@ -480,12 +480,11 @@ def check_guess_the_player(chat_id:int):
 def new_game_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():
-            new_db()
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
             if game:
                 return False, "a game has started"
 
-            guess_the_player = gp(
+            guess_the_player = GuessThePlayer(
                 chat_id=chat_id,
             )
             game = Game(
@@ -501,14 +500,15 @@ def new_game_guess_the_player(chat_id:int, session:Session):
 def join_game_guess_the_player(chat_id:int, player_id:int, session:Session):
     try:
         with session.begin():
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
                 return False, "no game"
 
             if guess_the_player.state != 0:
                 return False, "game has started"
 
-            player_db = session.query(GuessThePlayerPlayer).filter(GuessThePlayerPlayer.player_id == player_id).first()
+            player_db = session.query(GuessThePlayerPlayer).filter(GuessThePlayerPlayer.player_id == player_id,
+                                                                   GuessThePlayerPlayer.guess_the_player_id == chat_id).first()
             if player_db:
                 return False, "player already in game"
 
@@ -528,7 +528,7 @@ def join_game_guess_the_player(chat_id:int, player_id:int, session:Session):
 def start_game_guess_the_player(chat_id:int):
     try:
         with session.begin():
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
                 return False, "a game has started", -1
 
@@ -544,11 +544,35 @@ def start_game_guess_the_player(chat_id:int):
             )
 
             if not player_ids:
+                print("=================\n", "heeeeeeeree\n", "=================")
+                (
+                    session.query(Game)
+                    .filter(Game.chat_id == chat_id)
+                    .delete()
+                )
+                session.delete(guess_the_player)
+                session.execute(
+                     delete(guess_the_player_guess_the_player_player_association).where(
+                            guess_the_player_guess_the_player_player_association.c.guess_the_player_id == chat_id,
+                    )
+                )
                 return False, "no players associated with the game", -1
 
             num_players = len(player_ids)
 
             if num_players < 2 or num_players != guess_the_player.num_players:
+                print("=================\n", "heeeeeeeree\n", "=================")
+                (
+                    session.query(Game)
+                    .filter(Game.chat_id == chat_id)
+                    .delete()
+                )
+                session.delete(guess_the_player)
+                session.execute(
+                     delete(guess_the_player_guess_the_player_player_association).where(
+                            guess_the_player_guess_the_player_player_association.c.guess_the_player_id == chat_id,
+                    )
+                )
                 return False, "number of players is less than 2 or not as expected", -1
 
             player_id = player_ids[0][0]
@@ -566,49 +590,84 @@ def start_game_guess_the_player(chat_id:int):
 
             if not curr_player:
                 return False, "player not in game", -1
+
+            session.execute(
+                insert(guess_the_player_guess_the_player_player_association).values(
+                    guess_the_player_id=guess_the_player.chat_id,
+                    guess_the_player_player_id=guess_the_player.current_player_id,
+                    guess_the_player_player_player_id=curr_player[0],
+                    time_created=func.now()
+                )
+            )
     
             return True, "", curr_player[0]
     except Exception as e:
         print(f"An error occurred: {e}")
         return False, "exception", -1
 
-def start_round_guess_the_player(chat_id:int, player_id:int, curr_hints:list[str], curr_answer:str):
+def start_round_guess_the_player(player_id:int, curr_hints:list[str], curr_answer:str):
     try:
         with session.begin():
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
-            if not guess_the_player:
-                return False, "a game has started", []
+            result = session.execute(
+                select(
+                    guess_the_player_guess_the_player_player_association.c.id,
+                    guess_the_player_guess_the_player_player_association.c.guess_the_player_id,
+                )
+                .where(
+                    guess_the_player_guess_the_player_player_association.c.guess_the_player_player_player_id == player_id
+                )
+                .order_by(
+                    guess_the_player_guess_the_player_player_association.c.time_created.asc()
+                )
+                .limit(1)
+            ).first()
+            
+            print(result)
+            if not result:
+                return False, "player not found or not in game", [], -1
 
+            id, chat_id = result
+
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
+            if not guess_the_player:
+                return False, "a game has started", [], -1
+
+            print("==========\n", guess_the_player.state, "\n==========\n")
             if guess_the_player.state != 1 and guess_the_player.state != 3:
-                return False, "game error", []
+                return False, "game error", [], -1
             if len(curr_hints) != 3:
-                return False, "num hints error", []
+                return False, "num hints error", [], -1
             curr_player_id = (
                 session.query(GuessThePlayerPlayer.player_id)
                 .filter(GuessThePlayerPlayer.id == guess_the_player.current_player_id)
                 .first()
             )
             if not curr_player_id:
-                return False, "player not in game", []
+                return False, "player not in game", [], -1
             if curr_player_id[0] != player_id:
-                return False, "curr player error", []
+                return False, "curr player error", [], -1
             if curr_hints == ["", "", ""] or curr_answer == "":
-                return False, "empty inputs", []
+                return False, "empty inputs", [], -1
 
             curr_hints = [hint.strip().capitalize() for hint in curr_hints]
             guess_the_player.curr_answer = curr_answer.strip().lower()
             guess_the_player.curr_hints = curr_hints
             guess_the_player.state = 2
 
-            return True, "", curr_hints
+            session.execute(
+                delete(guess_the_player_guess_the_player_player_association)
+                .where(guess_the_player_guess_the_player_player_association.c.id == id)
+            )
+
+            return True, "", curr_hints, chat_id
     except Exception as e:
         print(f"An error occurred: {e}")
-        return False, "exception", []
+        return False, "exception", [], -1
 
 def ask_question_guess_the_player(chat_id:int, player_id:int, question:str):
     try:
         with session.begin():
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
                 return False, "a game has started", -1
 
@@ -631,10 +690,6 @@ def ask_question_guess_the_player(chat_id:int, player_id:int, question:str):
             if not player:
                 return False, "player not in game", -1
 
-            print("========================")
-            print("ASSSSSSSSSSSSSKIIIIIIIIIIIIIIIIIIING")
-            print(player.questions)
-            print("========================")
             if player.questions <= 0:
                 return False, "no questions", -1
 
@@ -656,7 +711,7 @@ def ask_question_guess_the_player(chat_id:int, player_id:int, question:str):
 def answer_question_guess_the_player(chat_id:int, player_id:int, player_asked_id:int, question:str, answer:str):
     try:
         with session.begin():
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
                 return False, "a game has started"
 
@@ -681,7 +736,6 @@ def answer_question_guess_the_player(chat_id:int, player_id:int, player_asked_id
                 curr_player = curr_players[0]
 
             question = question.lower().strip()
-            print(guess_the_player.curr_question, question)
             if guess_the_player.curr_question != question:
                 return False, "not the question"
 
@@ -708,7 +762,7 @@ def answer_question_guess_the_player(chat_id:int, player_id:int, player_asked_id
 def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str):
     try:
         with session.begin():
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
                 return False, "a game has started"
 
@@ -761,14 +815,13 @@ def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str):
 def end_round_guess_the_player(chat_id:int):
     try:
         with session.begin():
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
                 return False, "a game has started", -1
 
             if guess_the_player.state != 3:
                 return False, "game error", -1
 
-            print(guess_the_player.winning_player_id)
             if guess_the_player.winning_player_id == None:
                 curr_player = (
                         session.query(GuessThePlayerPlayer)
@@ -779,8 +832,6 @@ def end_round_guess_the_player(chat_id:int):
                 if not curr_player:
                     return False, "player not in game", -1
                 curr_player.score += 1
-            #elif self.winner_id == -2:
-                #pass
             else: 
                 winning_player = (
                         session.query(GuessThePlayerPlayer)
@@ -835,6 +886,16 @@ def end_round_guess_the_player(chat_id:int):
 
             guess_the_player.current_player_id = next_player[0]
 
+            session.execute(
+                insert(guess_the_player_guess_the_player_player_association).values(
+                    guess_the_player_id=guess_the_player.chat_id,
+                    guess_the_player_player_id=guess_the_player.current_player_id,
+                    guess_the_player_player_player_id=next_player[1],
+                    time_created=func.now()
+                )
+            )
+
+
             return True, "round end", next_player[1]
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -844,7 +905,7 @@ def end_game_guess_the_player(chat_id:int):
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
                 return False, "a game has started", {}, []
 
@@ -876,7 +937,7 @@ def cancel_game_guess_the_player(chat_id:int):
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
                 return False, "a game has started"
 
@@ -890,7 +951,7 @@ def cancel_game_guess_the_player(chat_id:int):
 def leave_game_guess_the_player(chat_id:int, player_id:int):
     try:
         with session.begin():
-            guess_the_player = session.query(gp).filter(gp.chat_id == chat_id).first()
+            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
                 return False, "a game has started", -1
     

@@ -15,6 +15,16 @@ draft_team_association = Table(
     UniqueConstraint("draft_id", "team_id", name="uq_draft_team")
 )
 
+guess_the_player_guess_the_player_player_association = Table(
+    "guess_the_player_guess_the_player_player", Base.metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("guess_the_player_id", Integer, ForeignKey('guess_the_player.chat_id', ondelete="CASCADE"), nullable=False),
+    Column("guess_the_player_player_id", Integer, ForeignKey('guess_the_player_player.id', ondelete="CASCADE"), nullable=False),
+    Column("guess_the_player_player_player_id", Integer, nullable=False),
+    Column("time_created", TIMESTAMP, default=func.now()),
+    UniqueConstraint("guess_the_player_id", "guess_the_player_player_id", name="uq_guess_the_player_guess_the_player_player")
+)
+
 class Game(Base):
     __tablename__ = "game"
     chat_id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -36,6 +46,15 @@ class GuessThePlayer(Base):
 
     players = relationship("GuessThePlayerPlayer", backref="GuessThePlayer", foreign_keys="GuessThePlayerPlayer.guess_the_player_id",
                            cascade="all, delete-orphan")
+
+    current_players = relationship(
+        "GuessThePlayerPlayer",
+        secondary=guess_the_player_guess_the_player_player_association,
+        primaryjoin="GuessThePlayer.chat_id == guess_the_player_guess_the_player_player.c.guess_the_player_id",
+        secondaryjoin="GuessThePlayerPlayer.id == guess_the_player_guess_the_player_player.c.guess_the_player_player_id",
+        back_populates="guess_the_players",
+        cascade="all"
+    )
 
     current_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL"), nullable=True)
     asking_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL"), nullable=True)
@@ -76,6 +95,15 @@ class GuessThePlayerPlayer(Base):
     answers: Mapped[int] = mapped_column(Integer, default=2)
     score: Mapped[int] = mapped_column(Integer, default=0)
     time_join: Mapped[datetime] = mapped_column(TIMESTAMP, default=func.now())
+
+    guess_the_players = relationship(
+        "GuessThePlayer",
+        secondary=guess_the_player_guess_the_player_player_association,
+        primaryjoin="GuessThePlayerPlayer.id == guess_the_player_guess_the_player_player.c.guess_the_player_player_id",
+        secondaryjoin="GuessThePlayer.chat_id == guess_the_player_guess_the_player_player.c.guess_the_player_id",
+        back_populates="current_players",
+        cascade="all"
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -119,7 +147,6 @@ class Team(Base):
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     
     drafts = relationship("Draft", secondary=draft_team_association, back_populates="teams", cascade="all")
-
 
 class DraftPlayerTeam(Base):
     __tablename__ = "draft_player_team"

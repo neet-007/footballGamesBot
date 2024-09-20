@@ -4,10 +4,10 @@ from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram._inline.inlinekeyboardmarkup import InlineKeyboardMarkup
 import telegram.ext
 from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
+from db.connection import new_db
 from shared import answer_question_guess_the_player, ask_question_guess_the_player, cancel_game_guess_the_player, check_guess_the_player, end_game_guess_the_player, end_round_guess_the_player, games, get_asked_questions_guess_the_player, join_game_guess_the_player, leave_game_guess_the_player, new_game_guess_the_player, proccess_answer_guess_the_player, remove_jobs, session, start_game_guess_the_player, start_round_guess_the_player
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
-from collections import deque
 
 async def handle_test_guess_the_player_new_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat or not context.job_queue:
@@ -96,7 +96,6 @@ async def handle_test_guess_the_player_start_game_job(context: telegram.ext.Cont
         else:
             return await context.bot.send_message(text="game error game aborted", chat_id=context.job.chat_id)
 
-    context.bot_data.setdefault(curr_player_id, deque()).append(context.job.chat_id)
     curr_player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=curr_player_id)
     curr_player = curr_player.user
 
@@ -118,7 +117,6 @@ async def handle_test_guess_the_player_start_game_command(update: telegram.Updat
         else:
             return await update.message.reply_text("game error game aborted")
 
-    context.bot_data.setdefault(curr_player_id, deque()).append(update.effective_chat.id)
     curr_player = await context.bot.get_chat_member(chat_id=update.effective_chat.id, user_id=curr_player_id)
     curr_player = curr_player.user
 
@@ -130,20 +128,11 @@ async def handle_test_guess_the_player_start_round(update: telegram.Update, cont
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or update.effective_chat.type != "private":
         return
 
-    chat_id_list = context.bot_data.get(update.effective_user.id, None)
-    print("chat list found", chat_id_list)
-    if chat_id_list == None or len(chat_id_list) == 0:
-        return
-
-    print("chat list found", chat_id_list)
-    chat_id = chat_id_list.pop()
-    print("chat id", chat_id)
-
     text = update.message.text.lower().split(",")
     if len(text) != 2:
         return await update.message.reply_text("must provide the player and hints separated by comma ','")
 
-    res, err, curr_hints = start_round_guess_the_player(chat_id, update.effective_user.id, text[1].split("-"), text[0])
+    res, err, curr_hints, chat_id = start_round_guess_the_player(update.effective_user.id, text[1].split("-"), text[0])
     if not res:
         if err == "game error":
             return await update.message.reply_text(err)
@@ -154,8 +143,7 @@ async def handle_test_guess_the_player_start_round(update: telegram.Update, cont
         if err == "curr player error":
             return await update.message.reply_text(err)
         else:
-            context.bot_data[update.effective_user.id].remove(chat_id)
-            return await update.message.reply_text("game error game aborted")
+            return await update.message.reply_text(err)
 
     text = "\n".join([f"{index}. {hint}" for index, hint in enumerate(curr_hints, start=1)])
     await context.bot.send_message(text=f"the curr hints are\n{text}\n every player has 3 questions and 2 tries\nuse /answer_player_guess_the_player followed by the player", chat_id=chat_id)
@@ -255,7 +243,6 @@ async def handle_test_guess_the_player_end_round_job(context: telegram.ext.Conte
         curr_player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=curr_player_id)
         curr_player = curr_player.user
 
-        context.bot_data.setdefault(curr_player_id, deque()).append(context.job.chat_id)
         await context.bot.send_message(text=f"gane started the curr player is {curr_player.mention_html()} send your the player and hints separated by comma ',' and the hints separated by a dash '-'",
                                        chat_id=context.job.chat_id, parse_mode=telegram.constants.ParseMode.HTML)
     else:
@@ -276,7 +263,6 @@ async def handle_test_guess_the_player_end_game_job(context: telegram.ext.Contex
         text += f"{player.user.mention_html()}:{score}\n"
 
     for player_id in winners:
-        print(player_id)
         player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=player_id)
         winners_text += f"{player.user.mention_html()}\n"
 
@@ -312,11 +298,6 @@ async def handle_test_guess_the_player_leave_game(update: telegram.Update, conte
         else:
             return await update.message.reply_text(err)
 
-    try:
-        context.bot_data.setdefault(curr_player_id, deque()).remove(update.effective_chat.id)
-    except:
-        pass
-
     await update.message.reply_text(f"player {update.effective_user.mention_html()} left the game", parse_mode=telegram.constants.ParseMode.HTML)
 
 async def handle_test_guess_the_player_cancel_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
@@ -348,7 +329,14 @@ async def handle_test_guess_the_player_get_questions(update: telegram.Update, co
 
     await update.message.reply_text(f"the questions are\n{text}")
 
+async def handle_new_db(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_chat:
+        return
+    new_db()
+    await update.message.reply_text(f"new db")
 
+
+new_db_handler = CommandHandler("new_db", handle_new_db)
 guess_the_player_new_game_command_handler = CommandHandler("new_guess_the_player", handle_test_guess_the_player_new_game)
 guess_the_player_join_game_command_handler = CommandHandler("join_guess_the_player", handle_test_guess_the_player_join_command)
 guess_the_player_start_game_command_handler = CommandHandler("start_game_guess_the_player", handle_test_guess_the_player_start_game_command)
