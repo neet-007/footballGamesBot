@@ -94,7 +94,8 @@ def join_game_draft(chat_id: int, player_id: int, session: Session):
             if draft.state != 0:
                 return False, "game has started"
 
-            player_db = session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id).first()
+            player_db = session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id,
+                                                          DraftPlayer.draft_id == chat_id).first()
             if player_db:
                 return False, "player already in game"
 
@@ -172,30 +173,23 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
                 return False, "player not in game", []
 
             game.formation_name = formation
+            teams = [team.lower().strip() for team in teams]
 
-            teams_ = [Team()] * len(teams)
-            draft_teams = [{}] * len(teams)
-            for i in range(len(teams)):
-                team = Team(
-                    name=teams[i],
-                    
-                )
+            existing_teams = [team for team in session.query(Team).all()]
+            
+            teams_to_add = [Team(name=name) for name in teams if name not in existing_teams]
+            
+            session.add_all(teams_to_add)
+            session.flush()  
+            
+            all_teams = existing_teams + teams_to_add
 
-                teams_[i] = team
-
-            session.add_all(teams_)
-            session.flush()
- 
-            for i in range(len(teams)):
-                draft_teams[i] = {
-                    "team_id":teams_[i].id,
-                    "draft_id":game.chat_id
-                }
-
-            session.execute(
-                draft_team_association.insert(),
-                draft_teams
-            )
+            draft_teams = [{
+                "team_id": team.id,
+                "draft_id": chat_id
+            } for team in all_teams]
+                
+            session.execute(draft_team_association.insert(), draft_teams)
 
             game.category = category
             
@@ -231,7 +225,8 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
             if game.state != 2:
                 return False, "game error", [None, None, None, None]
 
-            player = session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id).first()
+            player = session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id,
+                                                       DraftPlayer.draft_id == chat_id).first()
             
             if not player:
                 return False, "player not in game", [None, None, None, None]
@@ -378,7 +373,8 @@ def rand_team_draft(chat_id:int, player_id:int, session:Session):
             if not game:
                 return False , "no game found", "", ""
 
-            player = session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id).first()
+            player = session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id,
+                                                       DraftPlayer.draft_id == chat_id).first()
             if not player:
                 return False, "player not in game", "", ""
             
