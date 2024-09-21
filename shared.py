@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 import telegram
 import telegram.ext
 from random import shuffle, randint
-from db.connection import get_session, new_db
+from db.connection import get_session 
 from db.models import AskedQuestions, Draft as d, DraftPlayer, DraftPlayerTeam, Game, GuessThePlayerPlayer, Team, draft_team_association, GuessThePlayer as GuessThePlayer, guess_the_player_guess_the_player_player_association
 def remove_jobs(name:str, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
     if not context.job_queue:
@@ -176,14 +176,20 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
             teams = [team.lower().strip() for team in teams]
 
             existing_teams = [team for team in session.query(Team).all()]
-            
-            teams_to_add = [Team(name=name) for name in teams if name not in existing_teams]
+            existing_teams_names = [team.name for team in existing_teams]
+
+            print("================================\n", existing_teams, "\n================================\n")
+
+            teams_to_add = [Team(name=team) for team in teams if team not in existing_teams_names]
             
             session.add_all(teams_to_add)
             session.flush()  
             
+            print("================================\n", teams_to_add, "\n================================\n")
+
             all_teams = existing_teams + teams_to_add
 
+            print("================================\n", all_teams, "\n================================\n")
             draft_teams = [{
                 "team_id": team.id,
                 "draft_id": chat_id
@@ -275,7 +281,6 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
             setattr(player_team, game.curr_pos, added_player_lower)
             
             session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).update({"picked": True}) 
-            #session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id).update({"picked": True})
 
             session.flush()
             non_picked_players = (
@@ -386,7 +391,8 @@ def rand_team_draft(chat_id:int, player_id:int, session:Session):
 
             session.query(DraftPlayer).filter(DraftPlayer.id == game.picking_player_id).update({"picking":True})
             non_picked_teams = session.execute(
-                select(draft_team_association).where(draft_team_association.c.picked == False)
+                select(draft_team_association).where(draft_team_association.c.picked == False,
+                                                     draft_team_association.c.draft_id == chat_id)
             ).fetchall()
             if len(non_picked_teams) == 0:
                 return False, "game error", "", ""

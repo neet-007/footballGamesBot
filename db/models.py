@@ -73,7 +73,7 @@ class Draft(Base):
 
     players = relationship("DraftPlayer", backref="draft", foreign_keys="DraftPlayer.draft_id", cascade="all, delete-orphan")
 
-    teams = relationship("Team", secondary=draft_team_association, back_populates="drafts", cascade="all")
+    teams = relationship("Team", secondary=draft_team_association, back_populates="drafts", cascade="save-update")
 
     current_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL"), nullable=True)
     picking_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL"), nullable=True)
@@ -146,7 +146,7 @@ class Team(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     
-    drafts = relationship("Draft", secondary=draft_team_association, back_populates="teams", cascade="all")
+    drafts = relationship("Draft", secondary=draft_team_association, back_populates="teams")
 
 class DraftPlayerTeam(Base):
     __tablename__ = "draft_player_team"
