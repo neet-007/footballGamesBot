@@ -1,4 +1,3 @@
-from sqlalchemy import update
 import telegram
 from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram._inline.inlinekeyboardmarkup import InlineKeyboardMarkup
@@ -10,6 +9,11 @@ from telegram.ext._handlers.messagehandler import MessageHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
 from shared import FORMATIONS, add_pos_to_team_draft, cancel_game_draft, check_draft, end_game_draft, games, get_vote_data, join_game_draft, new_game_draft, rand_team_draft, remove_jobs, session, set_game_states_draft, start_game_draft
 
+PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
+NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_draft"
+EXCEPTION_ERROR = "internal error happend please try again later"
+STATE_ERROR = "game error happend\n or this is not the time for this command"
+
 def format_teams(teams:list[tuple[telegram.User, dict[str, str]]], formations:dict[str, str]):
     text = ""
     for player, team in teams:
@@ -19,12 +23,14 @@ def format_teams(teams:list[tuple[telegram.User, dict[str, str]]], formations:di
     return text
 
 async def handle_test_make_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
-    if not update.effective_chat or not update.effective_user or not update.message or not context.job_queue:
+    if not update.effective_chat or not update.effective_user or not update.message or not context.job_queue or update.effective_chat.type == "private":
         return
 
     res, err = new_game_draft(update.effective_chat.id, session)
     if not res:
-        return await update.message.reply_text(err)
+        if err == "a game has started in this chat":
+            return await update.message.reply_text("a game has started in this chat cant make a new one")
+        return await update.message.reply_text(EXCEPTION_ERROR)
 
     data = {"game_id":update.effective_chat.id, "time":datetime.now()}
     context.job_queue.run_repeating(handle_test_draft_reapting_join_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id,
@@ -37,19 +43,24 @@ async def handle_test_make_game(update: telegram.Update, context: telegram.ext.C
     ))
 
 async def handle_test_draft_reapting_join_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
-    print("repintg")
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    print("testeint res")
-    res, state, _ = check_draft(context.job.chat_id)
-    if not res or state!= 0:
-        return
-    print("send message")
+    res, err, state, num_players = check_draft(context.job.chat_id)
+    if not res:
+        if err == "no game found":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=NO_GAME_ERROR)
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=EXCEPTION_ERROR)
+    
+    if state != 0:
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=STATE_ERROR)
 
     await context.bot.send_message(
         chat_id=context.job.chat_id, 
-        text=f"Remaining time to join\n use /test_join to join the game\n or /test_start to start game: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+        text=f"Remaining time to join\n use /test_join to join the game\n or /test_start to start game\nnumber of players in game:{num_players}: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
     )
 
 async def handle_test_draft_start_game_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
@@ -59,7 +70,18 @@ async def handle_test_draft_start_game_job(context: telegram.ext.ContextTypes.DE
     remove_jobs(f"draft_reapting_join_job_{context.job.chat_id}", context)
     res, err, num_players = start_game_draft(context.job.chat_id, session)
     if not res:
-        return await context.bot.send_message(text=err, chat_id=context.job.chat_id)
+        if err == "no game":
+            return await context.bot.send_message(text=NO_GAME_ERROR, chat_id=context.job.chat_id)
+        if err == "state error":
+            return await context.bot.send_message(text=STATE_ERROR, chat_id=context.job.chat_id)
+        if err == "no players associated with the game":
+            return await context.bot.send_message(text="there are no players in this game\n start a new one /new_draft", chat_id=context.job.chat_id)
+        if err == "number of players is less than 2 or not as expecte…":
+            return await context.bot.send_message(text="number of players less than two could not start\n start a new one /new_draft", chat_id=context.job.chat_id)
+        if err == "exception":
+            return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
+        else:
+            return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
 
     data = {"game_id":context.job.chat_id, "time":datetime.now()}
     context.job_queue.run_repeating(handle_test_draft_reapting_statement_job, interval=20, first=10, data=data, chat_id=context.job.chat_id,
@@ -71,18 +93,27 @@ async def handle_test_draft_start_game_job(context: telegram.ext.ContextTypes.DE
                                    chat_id=context.job.chat_id)
 
 async def handle_test_join_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
-    if not update.effective_chat or not update.effective_user or not update.message:
+    if not update.effective_chat or not update.effective_user or not update.message or update.effective_chat.type == "private":
         return
 
     res, err = join_game_draft(update.effective_chat.id, update.effective_user.id, session)
     if not res:
-        return await context.bot.send_message(text=f"player {update.effective_user.mention_html()} {err}",
-                                              chat_id=update.effective_chat.id, parse_mode=telegram.constants.ParseMode.HTML)
+        if err == "no game":
+            return await update.message.reply_text(text=NO_GAME_ERROR)
+        if err == "game has started":
+            return await update.message.reply_text(text=EXCEPTION_ERROR)
+        if err == "player already in game":
+            await update.message.reply_text(f"player {update.effective_user.mention_html()} is already in game",
+                                            parse_mode=telegram.constants.ParseMode.HTML)
+        if err == "exception":
+            return await update.message.reply_text(text=EXCEPTION_ERROR)
+        else:
+            return await update.message.reply_text(text=EXCEPTION_ERROR)
+
     await update.message.reply_text(f"player {update.effective_user.mention_html()} has joined the game", parse_mode=telegram.constants.ParseMode.HTML)
 
 async def handle_test_draft_join_callback(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
-    print("here")
-    if not update.callback_query or not update.effective_chat or not update.effective_user:
+    if not update.callback_query or not update.effective_chat or not update.effective_user or update.effective_chat.type == "private":
         return
 
     q = update.callback_query
@@ -90,19 +121,43 @@ async def handle_test_draft_join_callback(update: telegram.Update, context: tele
 
     res, err = join_game_draft(update.effective_chat.id, update.effective_user.id, session)
     if not res:
-        return await context.bot.send_message(text=f"player {update.effective_user.mention_html()} {err}",
-                                              chat_id=update.effective_chat.id, parse_mode=telegram.constants.ParseMode.HTML)
+        if err == "no game":
+            return await context.bot.send_message(text=NO_GAME_ERROR,
+                                                  chat_id=update.effective_chat.id)
+        if err == "game has started":
+            return await context.bot.send_message(text=EXCEPTION_ERROR,
+                                                  chat_id=update.effective_chat.id)
+        if err == "player already in game":
+            return await context.bot.send_message(text=f"player {update.effective_user.mention_html()} is already in game",
+                                                  chat_id=update.effective_chat.id, parse_mode=telegram.constants.ParseMode.HTML)
+        if err == "exception":
+            return await context.bot.send_message(text=EXCEPTION_ERROR,
+                                                  chat_id=update.effective_chat.id)
+        else:
+            return await context.bot.send_message(text=EXCEPTION_ERROR,
+                                                  chat_id=update.effective_chat.id)
 
     await context.bot.send_message(text=f"player {update.effective_user.mention_html()} has joined the game",
                                    chat_id=update.effective_chat.id, parse_mode=telegram.constants.ParseMode.HTML)
 
 async def handle_test_start_game(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
-    if not update.effective_chat or not update.effective_user or not update.message or not context.job_queue:
+    if not update.effective_chat or not update.effective_user or not update.message or not context.job_queue or update.effective_chat.type == "private":
         return
 
     res, err, num_players= start_game_draft(update.effective_chat.id, session)
     if not res:
-        await update.message.reply_text(err)
+        if err == "no game":
+            return await update.message.reply_text(text=NO_GAME_ERROR)
+        if err == "state error":
+            return await update.message.reply_text(text=STATE_ERROR)
+        if err == "no players associated with the game":
+            return await update.message.reply_text(text="there are no players in this game\n start a new one /new_draft")
+        if err == "number of players is less than 2 or not as expecte…":
+            return await update.message.reply_text(text="number of players less than two could not start\n start a new one /new_draft")
+        if err == "exception":
+            return await update.message.reply_text(text=EXCEPTION_ERROR)
+        else:
+            return await update.message.reply_text(text=EXCEPTION_ERROR)
 
     data = {"game_id":update.effective_chat.id, "time":datetime.now()}
     context.job_queue.run_repeating(handle_test_draft_reapting_statement_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id,
@@ -116,29 +171,43 @@ async def handle_test_draft_reapting_statement_job(context: telegram.ext.Context
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    res, state, _ = check_draft(context.job.chat_id)
-    if not res or state != 1:
-        return
+    res, err,  state, _ = check_draft(context.job.chat_id)
+    if not res:
+        if err == "no game found":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=NO_GAME_ERROR)
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=EXCEPTION_ERROR)
 
+    if state != 1:
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=STATE_ERROR)
     await context.bot.send_message(
         chat_id=context.job.chat_id, 
         text=f"Remaining time to decide statements: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
     )
  
 async def handle_test_draft_set_state_command_job(context: telegram.ext.ContextTypes.DEFAULT_TYPE):
-    print("set state jon")
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
     remove_jobs(f"draft_reapting_statement_job_{context.job.chat_id}", context)
-    res, state, num_players = check_draft(context.job.chat_id)
-    if not res or state != 1:
-        return
+    res, err,  state, num_players = check_draft(context.job.chat_id)
+    if not res:
+        if err == "no game found":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=NO_GAME_ERROR)
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=EXCEPTION_ERROR)
+
+    if state != 1:
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=STATE_ERROR)
 
     await context.bot.send_message(chat_id=context.job.chat_id, text=f"the admin should send the state as /test_set category, teams,teams should be separated by - and the number of teams must be {11 + num_players} formations in that order with commas\n supported formations are 442 443 4231 352 532 in this foramt")
 
 async def handle_test_set_state(update: telegram.Update, context:telegram.ext.ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text or not update.effective_chat or not update.effective_user:
+    if not update.message or not update.message.text or not update.effective_chat or not update.effective_user or update.effective_chat.type == "private":
         return
 
     text = update.message.text.lower().replace("/test_set", "").split(",")
@@ -150,20 +219,26 @@ async def handle_test_set_state(update: telegram.Update, context:telegram.ext.Co
                             session)
     if not res:
         if err == "game error":
-            return await update.message.reply_text("err happend game aported")
+            return await update.message.reply_text(EXCEPTION_ERROR)
+        if err == "no game found":
+            return await update.message.reply_text(NO_GAME_ERROR)
+        if err == "player not in game":
+            return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
         if err == "no category error":
             return await update.message.reply_text("no category provided")
         if err == "num of teams error":
-            return await update.message.reply_text("number of teams must be")
+            return await update.message.reply_text(f"number of teams must be {11 + other[0]}")
         if err == "formation error":
             return await update.message.reply_text("formation must be 442 or 443 or 4231 or 352 or 523 written like this")
         if err == "duplicate teams error":
             return await update.message.reply_text("the teams must be with no duplicates")
+        if err == "expection":
+            return await update.message.reply_text(EXCEPTION_ERROR)
         else:
-            return await update.message.reply_text(f"{err}{other}")
+            return await update.message.reply_text(EXCEPTION_ERROR)
 
     curr_player = await update.effective_chat.get_member(other[3])
-    await update.message.reply_text(f"the category is {other[0]} the formation is {other[1]} the availabe teams are f{other[2]}",
+    await update.message.reply_text(f"the category is {other[1]} the formation is {other[2]} the availabe teams are f{other[3]}",
                                     parse_mode=telegram.constants.ParseMode.HTML)
     return await update.message.reply_text(f"player {curr_player.user.mention_html()} press the button to pick team",
                                            parse_mode=telegram.constants.ParseMode.HTML,
@@ -178,36 +253,58 @@ async def handle_test_draft_pick_team_callback(update: telegram.Update, context:
     q = update.callback_query
     await q.answer()
     
-    res, team, formation, curr_pos = rand_team_draft(update.effective_chat.id, update.effective_user.id, session)
+    res, err, team, formation, curr_pos = rand_team_draft(update.effective_chat.id, update.effective_user.id, session)
     if not res:
-        print(team, formation, curr_pos)
-        return 
+        if err == "no game found":
+            return await context.bot.send_message(text=NO_GAME_ERROR,
+                                                  chat_id=update.effective_chat.id)
+        if err == "player not in game":
+            return await context.bot.send_message(text=PLAYER_NOT_IN_GAME_ERROR,
+                                                  chat_id=update.effective_chat.id)
+        if err == "game error":
+            return await context.bot.send_message(text=EXCEPTION_ERROR,
+                                                  chat_id=update.effective_chat.id)
+        if err == "curr_player_error":
+            return await context.bot.send_message(text="player not curr player",
+                                                  chat_id=update.effective_chat.id)
+        if err == "expection":
+            return await context.bot.send_message(text=EXCEPTION_ERROR,
+                                                  chat_id=update.effective_chat.id)
+        else:
+            return await context.bot.send_message(text=EXCEPTION_ERROR,
+                                                  chat_id=update.effective_chat.id)
 
     await context.bot.send_message(text=f"the team is {team} now choose your {FORMATIONS[formation][curr_pos]}", chat_id=update.effective_chat.id)
 
 async def handle_test_draft_add_pos(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue:
+    if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
         return
 
     res, status, other = add_pos_to_team_draft(update.effective_chat.id, update.effective_user.id,
                                         update.message.text.lower().strip(), session)
     if not res:
+        if status == "no game found":
+            return await update.message.reply_text(NO_GAME_ERROR)
+        if status == "player not in game":
+            return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
+        if status == "curr_player_error":
+            return await update.message.reply_text("not current player")
         if status == "game_error":
-            del games[update.effective_chat.id]
-            return await update.message.reply_text("an error happend game aported")
-        elif status == "picked_pos_error":
+            return await update.message.reply_text(EXCEPTION_ERROR)
+        if status == "picked_pos_error":
             return await update.message.reply_text("player has already picked this position")
-        elif status == "curr_player_error":
-            return
-        elif status == "picked_team_error":
+        if status == "picked_team_error":
             return await update.message.reply_text("this team has already passed")
-        elif status == "taken_player_error":
+        if status == "taken_player_error":
             return await update.message.reply_text("this player is taken")
+        if status == "expection":
+            return await update.message.reply_text(EXCEPTION_ERROR)
         else:
-            return await update.message.reply_text(status)
+            return await update.message.reply_text(EXCEPTION_ERROR)
+
     if status == "new_pos":
         if not other[0]:
-            return await update.message.reply_text("error happend")
+            return await update.message.reply_text(EXCEPTION_ERROR)
         start_player = await update.effective_chat.get_member(other[0])
         return await update.message.reply_text(f"player {start_player.user.mention_html()} press the button to pick team",
                                                parse_mode=telegram.constants.ParseMode.HTML,
@@ -216,12 +313,12 @@ async def handle_test_draft_add_pos(update: telegram.Update, context: telegram.e
                                                ]))
     elif status == "same_pos":
         if not other[0] or not other[1] or not other[2]:
-            return await update.message.reply_text("error happend")
+            return await update.message.reply_text(EXCEPTION_ERROR)
         curr_player = await update.effective_chat.get_member(other[0])
         return await update.message.reply_text(f"player {curr_player.user.mention_html()} choose your player for {FORMATIONS[other[1]][other[2]]}", parse_mode=telegram.constants.ParseMode.HTML)
     elif status == "end_game":
         if not other[0] or not other[1] or not other[2] or not other[3]:
-            return await update.message.reply_text("error happend")
+            return await update.message.reply_text(EXCEPTION_ERROR)
 
         data = {"game_id":update.effective_chat.id, "time":datetime.now()}
         context.job_queue.run_repeating(handle_test_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id,
@@ -244,9 +341,17 @@ async def handle_test_draft_reapting_votes_job(context: telegram.ext.ContextType
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    res, state, _ = check_draft(context.job.chat_id)
+    res, err, state, _ = check_draft(context.job.chat_id)
+    if not res:
+        if err == "no game found":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=NO_GAME_ERROR)
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=EXCEPTION_ERROR)
+
     if not res or state != 3:
-        return
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=STATE_ERROR)
 
     await context.bot.send_message(
         chat_id=context.job.chat_id, 
@@ -260,9 +365,21 @@ async def handle_test_draft_start_votes_command(update: telegram.Update, context
     remove_jobs(f"draft_reapting_votes_job_{update.effective_chat.id}", context)
     remove_jobs(f"draft_reapting_votes_end_job_{update.effective_chat.id}", context)
     chat_id = update.effective_chat.id
-    res, state, players_ids = get_vote_data(chat_id)
-    if not res or state != 3 or not players_ids:
-        return
+    res, err, state, players_ids = get_vote_data(chat_id)
+    if not res:
+        if err == "no game":
+            return await update.message.reply_text(NO_GAME_ERROR)
+        if err == "no players associated with the game":
+            return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
+        if err == "exception":
+            return await update.message.reply_text(EXCEPTION_ERROR)
+        else:
+            return await update.message.reply_text(EXCEPTION_ERROR)
+
+    if state != 3:
+        return await update.message.reply_text(STATE_ERROR)
+    if not players_ids:
+        return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
 
     players = []
     for id in players_ids:
@@ -294,9 +411,17 @@ async def handle_test_draft_reapting_votes_end_job(context: telegram.ext.Context
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    res, state, _ = check_draft(context.job.chat_id)
+    res, err, state, _ = check_draft(context.job.chat_id)
+    if not res:
+        if err == "no game found":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=NO_GAME_ERROR)
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=EXCEPTION_ERROR)
+
     if not res or state != 3:
-        return
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=STATE_ERROR)
 
     await context.bot.send_message(
         chat_id=context.job.chat_id, 
@@ -309,10 +434,23 @@ async def handle_test_draft_set_votes_job(context: telegram.ext.ContextTypes.DEF
 
     remove_jobs(f"draft_reapting_votes_job_{context.job.chat_id}", context)
     remove_jobs(f"draft_reapting_votes_end_job_{context.job.chat_id}", context)
+    
     chat_id = context.job.data["game_id"]
-    res, state, players_ids = get_vote_data(chat_id)
-    if not res or state != 3 or not players_ids:
-        return
+    res, err, state, players_ids = get_vote_data(chat_id)
+    if not res:
+        if err == "no game":
+            return await context.bot.send_message(chat_id==chat_id, text=NO_GAME_ERROR)
+        if err == "no players associated with the game":
+            return await context.bot.send_message(chat_id==chat_id, text=PLAYER_NOT_IN_GAME_ERROR)
+        if err == "exception":
+            return await context.bot.send_message(chat_id==chat_id, text=EXCEPTION_ERROR)
+        else:
+            return await context.bot.send_message(chat_id==chat_id, text=EXCEPTION_ERROR)
+
+    if state != 3:
+        return await context.bot.send_message(chat_id==chat_id, text=STATE_ERROR)
+    if not players_ids:
+        return await context.bot.send_message(chat_id==chat_id, text=PLAYER_NOT_IN_GAME_ERROR)
 
     players = []
     for id in players_ids:
@@ -334,7 +472,6 @@ async def handle_test_draft_set_votes_job(context: telegram.ext.ContextTypes.DEF
 
     context.bot_data[f"poll_{message.poll.id}"] = poll_data
     context.bot_data[f"poll_{chat_id}"] = poll_data
-    print(context.bot_data)
     data = {"game_id":chat_id, "time":datetime.now(), "poll_id":message.poll.id}
     context.job_queue.run_repeating(handle_test_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id,
                                     name=f"draft_reapting_votes_end_job_{context.job.chat_id}")
@@ -342,17 +479,19 @@ async def handle_test_draft_set_votes_job(context: telegram.ext.ContextTypes.DEF
                                name=f"draft_end_votes_job_{context.job.chat_id}")
 
 async def handle_test_draft_vote_recive(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE):
-    print("here")
     if not update.poll_answer or not context.job_queue:
         return
-    print("if ppadded")
 
     answer = update.poll_answer
     poll_data = context.bot_data[f"poll_{answer.poll_id}"]
     chat_id = poll_data["chat_id"]
-    res, _, num_players = check_draft(chat_id)
-    if res == None:
-        return 
+    res, err, _, num_players = check_draft(chat_id)
+    if not res:
+        if err == "no game found":
+            return await context.bot.send_message(chat_id=chat_id,
+                                                  text=NO_GAME_ERROR)
+        return await context.bot.send_message(chat_id=chat_id,
+                                              text=EXCEPTION_ERROR)
 
     try:
         questions = poll_data["questions"]
@@ -380,9 +519,19 @@ async def handle_test_draft_end_votes_command(update: telegram.Update, context: 
     chat_id = poll_data["chat_id"]
 
     votes = poll_data["votes_count"]
-    res, players_and_teams, formation = end_game_draft(chat_id)
-    if not res or not players_and_teams or not formation:
-        return await context.bot.send_message(text="error happend or excpetion", chat_id=chat_id)
+    res, err, players_and_teams, formation = end_game_draft(chat_id)
+    if not res:
+        if err == "no game found":
+            return await context.bot.send_message(text=NO_GAME_ERROR, chat_id=chat_id)
+        if err == "no players no formation":
+            return await context.bot.send_message(text=PLAYER_NOT_IN_GAME_ERROR, chat_id=chat_id)
+        if err == "exception":
+            return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
+        else:
+            return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
+
+    if not players_and_teams or not formation:
+        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
     
     players = []
     for id, _ in players_and_teams:
@@ -425,9 +574,19 @@ async def handle_test_draft_end_votes_job(context: telegram.ext.ContextTypes.DEF
     chat_id = poll_data["chat_id"]
 
     votes = poll_data["votes_count"]
-    res, players_and_teams, formation = end_game_draft(chat_id)
-    if not res or not players_and_teams or not formation:
-        return await context.bot.send_message(text="error happend or excpetion", chat_id=chat_id)
+    res, err, players_and_teams, formation = end_game_draft(chat_id)
+    if not res:
+        if err == "no game found":
+            return await context.bot.send_message(text=NO_GAME_ERROR, chat_id=chat_id)
+        if err == "no players no formation":
+            return await context.bot.send_message(text=PLAYER_NOT_IN_GAME_ERROR, chat_id=chat_id)
+        if err == "exception":
+            return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
+        else:
+            return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
+
+    if not players_and_teams or not formation:
+        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
     
     players = []
     for id, _ in players_and_teams:
@@ -465,6 +624,12 @@ async def handle_test_draft_end_game_job(context: telegram.ext.ContextTypes.DEFA
 
     winners = context.job.data["winners"]
     formation = context.job.data["formation"]
+    
+    if not isinstance(winners, list):
+        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
+    if not isinstance(formation, dict):
+        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
+
     winners_text = ""
     teams = []
     for winner in winners:
@@ -477,9 +642,14 @@ async def handle_test_draft_cancel_game(update: telegram.Update, context: telegr
     if not update.effective_chat or not update.message:
         return
 
-    res = cancel_game_draft(update.effective_chat.id, session)
+    res, err = cancel_game_draft(update.effective_chat.id, session)
     if not res:
-        return await update.message.reply_text("there is no game please start one first /new_draft")
+        if err == "no game found":
+            return await update.message.reply_text(NO_GAME_ERROR)
+        if err == "exception":
+            return await update.message.reply_text(EXCEPTION_ERROR)
+        else:
+            return await update.message.reply_text(EXCEPTION_ERROR)
 
     remove_jobs(f"draft_reapting_votes_job_{update.effective_chat.id}", context)
     remove_jobs(f"draft_reapting_end_votes_job_{update.effective_chat.id}", context)
