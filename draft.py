@@ -7,7 +7,7 @@ from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
-from shared import FORMATIONS, add_pos_to_team_draft, cancel_game_draft, check_draft, end_game_draft, games, get_vote_data, join_game_draft, new_game_draft, rand_team_draft, remove_jobs, session, set_game_states_draft, start_game_draft
+from shared import FORMATIONS, add_pos_to_team_draft, cancel_game_draft, check_draft, end_game_draft, get_vote_data, join_game_draft, new_game_draft, rand_team_draft, remove_jobs, session, set_game_states_draft, start_game_draft
 
 PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
 NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_draft"
