@@ -4,9 +4,8 @@ from os import getenv
 import telegram
 import telegram.ext
 from telegram.ext._handlers.messagehandler import MessageHandler
-from db.connection import new_db
-from draft import random_team_draft_game_callback_handler, make_game_test_handler, join_game_test_handler, start_game_test_handler, set_game_test_handler, position_draft_message_test_handler, cancel_game_test_handler, vote_recive_poll_answer_test_handler, end_vote_game_test_handler, join_game_callback_test_handler, start_vote_game_test_handler
-from guess_the_player import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_dispatch_messages, new_db_handler
+from games.draft_handlers import random_team_draft_game_callback_handler, make_game_test_handler, join_game_test_handler, start_game_test_handler, set_game_test_handler, position_draft_message_test_handler, cancel_game_test_handler, vote_recive_poll_answer_test_handler, end_vote_game_test_handler, join_game_callback_test_handler, start_vote_game_test_handler
+from games.guess_the_player_handlers import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_dispatch_messages, new_db_handler, guess_the_player_dispatch_handler
 from shared import Wilty, games
 from fastapi import FastAPI, Request, Response 
 
@@ -86,28 +85,29 @@ async def handle_dispatch_messages_(update: telegram.Update, context: telegram.e
         return
 
 ptb.add_handler(new_db_handler)
-#ptb.add_handler(guess_the_player_new_game_command_handler)
-#ptb.add_handler(guess_the_player_join_game_command_handler)
-#ptb.add_handler(guess_the_player_join_game_callback_handler)
-#ptb.add_handler(guess_the_player_start_game_command_handler)
-#ptb.add_handler(guess_the_player_ask_question_command_handler)
+ptb.add_handler(guess_the_player_new_game_command_handler)
+ptb.add_handler(guess_the_player_join_game_command_handler)
+ptb.add_handler(guess_the_player_join_game_callback_handler)
+ptb.add_handler(guess_the_player_start_game_command_handler)
+ptb.add_handler(guess_the_player_ask_question_command_handler)
 #ptb.add_handler(guess_the_player_answer_question_command_handler)
 #ptb.add_handler(guess_the_player_proccess_answer_command_handler)
-#ptb.add_handler(guess_the_player_cancel_game_command_handler)
+ptb.add_handler(guess_the_player_cancel_game_command_handler)
 #ptb.add_handler(guess_the_player_start_round_command_handler)
-#ptb.add_handler(guess_the_player_leave_game_command_handler)
-#ptb.add_handler(guess_thE_player_get_questions_command_handler)
+ptb.add_handler(guess_the_player_leave_game_command_handler)
+ptb.add_handler(guess_thE_player_get_questions_command_handler)
+ptb.add_handler(guess_the_player_dispatch_handler)
 
-ptb.add_handler(make_game_test_handler)
-ptb.add_handler(join_game_test_handler)
-ptb.add_handler(start_game_test_handler)
-ptb.add_handler(set_game_test_handler)
-ptb.add_handler(cancel_game_test_handler)
-ptb.add_handler(end_vote_game_test_handler)
-ptb.add_handler(start_vote_game_test_handler)
-ptb.add_handler(vote_recive_poll_answer_test_handler)
-ptb.add_handler(join_game_callback_test_handler)
-ptb.add_handler(random_team_draft_game_callback_handler)
-ptb.add_handler(position_draft_message_test_handler)
-ptb.add_handler(MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_dispatch_messages))
+#ptb.add_handler(make_game_test_handler)
+#ptb.add_handler(join_game_test_handler)
+#ptb.add_handler(start_game_test_handler)
+#ptb.add_handler(set_game_test_handler)
+#ptb.add_handler(cancel_game_test_handler)
+#ptb.add_handler(end_vote_game_test_handler)
+#ptb.add_handler(start_vote_game_test_handler)
+#ptb.add_handler(vote_recive_poll_answer_test_handler)
+#ptb.add_handler(join_game_callback_test_handler)
+#ptb.add_handler(random_team_draft_game_callback_handler)
+#ptb.add_handler(position_draft_message_test_handler)
+#ptb.add_handler(MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_dispatch_messages))
 
