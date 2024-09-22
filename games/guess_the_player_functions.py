@@ -1,7 +1,7 @@
 from sqlalchemy import delete, func, insert, or_, select, update
 from db.connection import get_session
 from db.models import AskedQuestions, Game, GuessThePlayer, GuessThePlayerPlayer, guess_the_player_guess_the_player_player_association
-from shared import jaro_winkler_similarity
+from utils.jaro_winkler import jaro_winkler_similarity
 
 session = get_session()
 

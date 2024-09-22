@@ -5,8 +5,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, Mes
 
 from db.connection import new_db
 from games.guess_the_player_functions import answer_question_guess_the_player, ask_question_guess_the_player, cancel_game_guess_the_player, check_guess_the_player, end_game_guess_the_player, end_round_guess_the_player, get_asked_questions_guess_the_player, join_game_guess_the_player, leave_game_guess_the_player, new_game_guess_the_player, proccess_answer_guess_the_player, start_game_guess_the_player, start_round_guess_the_player
-from shared import remove_jobs
-
+from utils.helpers import remove_jobs
 
 PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
 NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_guess_the_player"

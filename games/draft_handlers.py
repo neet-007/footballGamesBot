@@ -9,8 +9,7 @@ from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
 
 from db.connection import get_session
 from games.draft_functions import FORMATIONS, add_pos_to_team_draft, cancel_game_draft, check_draft, end_game_draft, get_vote_data, join_game_draft, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft
-from shared import remove_jobs
-
+from utils.helpers import remove_jobs
 
 PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
 NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_draft"
@@ -182,12 +181,14 @@ async def handle_test_draft_reapting_statement_job(context: ContextTypes.DEFAULT
     res, err,  state, _ = check_draft(context.job.chat_id)
     if not res:
         if err == "no game found":
-            return 
-        return 
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=NO_GAME_ERROR)
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=EXCEPTION_ERROR)
 
     if state != 1:
-        return
-
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=STATE_ERROR)
     await context.bot.send_message(
         chat_id=context.job.chat_id, 
         text=f"Remaining time to decide statements: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
@@ -201,12 +202,14 @@ async def handle_test_draft_set_state_command_job(context: ContextTypes.DEFAULT_
     res, err,  state, num_players = check_draft(context.job.chat_id)
     if not res:
         if err == "no game found":
-            return
-
-        return
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=NO_GAME_ERROR)
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=EXCEPTION_ERROR)
 
     if state != 1:
-        return 
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                              text=STATE_ERROR)
 
     await context.bot.send_message(chat_id=context.job.chat_id, text=f"the admin should send the state as /test_set category, teams,teams should be separated by - and the number of teams must be {11 + num_players} formations in that order with commas\n supported formations are 442 443 4231 352 532 in this foramt")
 
