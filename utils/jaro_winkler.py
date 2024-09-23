@@ -51,4 +51,3 @@ def jaro_winkler_similarity(s1: str, s2: str) -> float:
         prefix_length += 1
 
     return jaro_score + (prefix_length * 0.1 * (1 - jaro_score))
-games = {}

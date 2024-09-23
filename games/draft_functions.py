@@ -1,8 +1,10 @@
+import logging
 from random import randint
 from sqlalchemy import or_, select
 from db.connection import get_session
 from db.models import Draft, DraftPlayer, DraftPlayerTeam, Game, Team, draft_team_association
 
+logger = logging.getLogger(__name__)
 
 FORMATIONS = {
     "442":{"p1":"gk", "p2":"rb", "p3":"rcb", "p4":"lcb", "p5":"lb",
@@ -52,6 +54,7 @@ def get_vote_data(chat_id:int):
         return False, "exception", -1, None
 
 def new_game_draft(chat_id: int):
+    logger.info("first log")
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()

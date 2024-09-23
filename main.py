@@ -6,6 +6,7 @@ from telegram import Update
 from fastapi import FastAPI, Request, Response
 from sys import exit
 from bot.bot import ptb, sync_ptb
+from custom_logging.setup_logging import setup_logging
 
 load_dotenv()
 
@@ -20,6 +21,7 @@ if not BOT_API_TOKEN:
 app = FastAPI()
 
 if not WEBHOOK_URL:
+    setup_logging()
     print("Starting in polling mode")
 
     async def start_polling():
@@ -40,6 +42,7 @@ else:
             yield
             await ptb.stop()
 
+    setup_logging()
     app = FastAPI(lifespan=lifespan)
 
 @app.post("/")
