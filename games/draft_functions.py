@@ -411,7 +411,6 @@ def end_game_draft(chat_id:int):
                 return False, "no game found", None, None
 
             formation = draft.formation_name
-            #formation = session.query(d.formation_name).filter(d.chat_id == chat_id).first()
             query_results = (
                 session.query(
                     DraftPlayerTeam.player_id,
