@@ -1,7 +1,7 @@
 from sqlalchemy import delete, func, insert, or_, select, update
+from sqlalchemy.orm import Session
 from db.connection import get_session
 from db.models import AskedQuestions, Game, GuessThePlayer, GuessThePlayerPlayer, guess_the_player_guess_the_player_player_association
-from utils.jaro_winkler import jaro_winkler_similarity
 
 session = get_session()
 
@@ -17,7 +17,7 @@ def check_guess_the_player(chat_id:int):
         print(f"An error occurred: {e}")
         return False, "exception", -1, -1
 
-def new_game_guess_the_player(chat_id:int):
+def new_game_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
@@ -37,7 +37,7 @@ def new_game_guess_the_player(chat_id:int):
         print(f"An error occurred: {e}")
         return False, "exception"
 
-def join_game_guess_the_player(chat_id:int, player_id:int):
+def join_game_guess_the_player(chat_id:int, player_id:int, session:Session):
     try:
         with session.begin():
             guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
@@ -65,7 +65,7 @@ def join_game_guess_the_player(chat_id:int, player_id:int):
         print(f"An error occurred: {e}")
         return False, "exception"
 
-def start_game_guess_the_player(chat_id:int):
+def start_game_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():
             guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
@@ -99,6 +99,7 @@ def start_game_guess_the_player(chat_id:int):
 
             num_players = len(player_ids)
 
+            print("\n============================\n", num_players, guess_the_player, "\n============================\n")
             if num_players < 2 or num_players != guess_the_player.num_players:
                 (
                     session.query(Game)
@@ -143,7 +144,7 @@ def start_game_guess_the_player(chat_id:int):
         print(f"An error occurred: {e}")
         return False, "exception", -1
 
-def start_round_guess_the_player(player_id:int, curr_hints:list[str], curr_answer:str):
+def start_round_guess_the_player(player_id:int, curr_hints:list[str], curr_answer:str, session:Session):
     try:
         with session.begin():
             result = session.execute(
@@ -471,7 +472,7 @@ def end_game_guess_the_player(chat_id:int):
         print(f"An error occurred: {e}")
         return False, "exception", {}, []
 
-def cancel_game_guess_the_player(chat_id:int):
+def cancel_game_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()

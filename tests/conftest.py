@@ -24,5 +24,9 @@ def get_session() -> Session:
 
 @pytest.fixture(scope="session")
 def db_session():
-    with get_session() as session:
-        yield session
+    session = get_session()  # create a new session
+    try:
+        yield session  # use this session
+    finally:
+        session.rollback()  # rollback any pending transactions
+        session.close()  # ensure the session is closed
