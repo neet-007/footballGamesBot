@@ -2,4 +2,5 @@
 *local.db
 *local.db-shm
 *local.db-wal
-*logs
+logs/
+custom_logging/logs/

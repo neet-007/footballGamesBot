@@ -1,3 +1,4 @@
+import pytest
 from os import getenv
 
 from sqlalchemy import create_engine
@@ -5,7 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from db.models import Base
 
-TURSO_DATABASE_URL = getenv("TURSO_DATABASE_URL", "http://127.0.0.1:8080") 
+TURSO_DATABASE_URL = getenv("TURSO_DATABASE_URL", "://127.0.0.1:8080") 
 print("db url: ", TURSO_DATABASE_URL)
 
 engine = create_engine("sqlite+libsql" + TURSO_DATABASE_URL, connect_args={'check_same_thread': False}, echo=False)
@@ -20,3 +21,8 @@ def drop_db():
 def get_session() -> Session:
     SessionFactory = sessionmaker(bind=engine)
     return SessionFactory()
+
+@pytest.fixture(scope="session")
+def db_session():
+    with get_session() as session:
+        yield session

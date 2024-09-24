@@ -1,2 +1,0 @@
-{"level": "DEBUG", "message": "Looking for jobs to run", "timestamp": "2024-09-23T13:52:29.741003+00:00", "logger": "apscheduler.scheduler", "module": "base", "function": "_process_jobs", "line": 954, "thread_name": "MainThread"}
-{"level": "DEBUG", "message": "No jobs; waiting until a job is added", "timestamp": "2024-09-23T13:52:29.741592+00:00", "logger": "apscheduler.scheduler", "module": "base", "function": "_process_jobs", "line": 1030, "thread_name": "MainThread"}
