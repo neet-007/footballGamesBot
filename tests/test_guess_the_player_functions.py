@@ -287,10 +287,11 @@ def test_play_game_same_players(db_session: Session, test_input: dict[str, list[
         curr_players = {}
         for game, future in start_game_futures.items():
             res, err, curr_player = future.result()
-            print("\n==========================\n", res, err, curr_player, "\n==========================\n")
+            print("\n==========================\n", game, res, err, curr_player, "\n==========================\n")
             assert res is True
             assert err == ""
             assert isinstance(curr_player, int) is True
 
             curr_players[game] = curr_player
 
+        drop_db()

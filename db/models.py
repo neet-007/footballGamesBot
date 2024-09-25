@@ -56,9 +56,9 @@ class GuessThePlayer(Base):
         cascade="all"
     )
 
-    current_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL"), nullable=True)
-    asking_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL"), nullable=True)
-    winning_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL"), nullable=True)
+    current_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL", use_alter=True), nullable=True)
+    asking_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL", use_alter=True), nullable=True)
+    winning_player_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("guess_the_player_player.id", ondelete="SET NULL", use_alter=True), nullable=True)
 
     asked_questions = relationship("AskedQuestions", backref="guess_the_player", cascade="all, delete-orphan")
 
@@ -75,9 +75,9 @@ class Draft(Base):
 
     teams = relationship("Team", secondary=draft_team_association, back_populates="drafts", cascade="save-update")
 
-    current_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL"), nullable=True)
-    picking_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL"), nullable=True)
-    curr_team_id: Mapped[int] = mapped_column(Integer, ForeignKey("team.id", ondelete="SET NULL"), nullable=True)
+    current_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL", use_alter=True), nullable=True)
+    picking_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL", use_alter=True), nullable=True)
+    curr_team_id: Mapped[int] = mapped_column(Integer, ForeignKey("team.id", ondelete="SET NULL", use_alter=True), nullable=True)
 
     state: Mapped[int] = mapped_column(Integer, default=0)
     curr_pos: Mapped[str] = mapped_column(String(3), default="p1")
@@ -87,7 +87,7 @@ class GuessThePlayerPlayer(Base):
     __tablename__ = "guess_the_player_player"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     player_id: Mapped[int] = mapped_column(Integer)
-    guess_the_player_id: Mapped[int] = mapped_column(Integer, ForeignKey('guess_the_player.chat_id', ondelete="CASCADE"))
+    guess_the_player_id: Mapped[int] = mapped_column(Integer, ForeignKey('guess_the_player.chat_id', ondelete="CASCADE", use_alter=True))
 
     picked: Mapped[bool] = mapped_column(Boolean, default=False)
     muted: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -117,7 +117,7 @@ class DraftPlayer(Base):
     __tablename__ = "draft_player"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     player_id: Mapped[int] = mapped_column(Integer)
-    draft_id: Mapped[int] = mapped_column(Integer, ForeignKey('draft.chat_id', ondelete="CASCADE"))
+    draft_id: Mapped[int] = mapped_column(Integer, ForeignKey('draft.chat_id', ondelete="CASCADE", use_alter=True))
 
     picked: Mapped[bool] = mapped_column(Boolean, default=False)
     picking: Mapped[bool] = mapped_column(Boolean, default=False)
