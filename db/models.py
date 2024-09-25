@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, Table, UniqueConstraint, func
+from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, Table, UniqueConstraint, func, text
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
 
 class Base(DeclarativeBase):
@@ -21,7 +21,7 @@ guess_the_player_guess_the_player_player_association = Table(
     Column("guess_the_player_id", Integer, ForeignKey('guess_the_player.chat_id', ondelete="CASCADE"), nullable=False),
     Column("guess_the_player_player_id", Integer, ForeignKey('guess_the_player_player.id', ondelete="CASCADE"), nullable=False),
     Column("guess_the_player_player_player_id", Integer, nullable=False),
-    Column("time_created", TIMESTAMP, default=func.now()),
+    Column("time_created", TIMESTAMP(timezone=True), server_default=func.now(text('6'))),
     UniqueConstraint("guess_the_player_id", "guess_the_player_player_id", name="uq_guess_the_player_guess_the_player_player")
 )
 

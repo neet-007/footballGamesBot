@@ -5,6 +5,7 @@ from db.models import Game, GuessThePlayer
 from games.guess_the_player_functions import cancel_game_guess_the_player, join_game_guess_the_player, new_game_guess_the_player, start_game_guess_the_player, start_round_guess_the_player
 import concurrent.futures
 from .conftest import new_db, drop_db
+from time import sleep
 
 @pytest.mark.parametrize("test_input, expected", [
     ([11, 22, 33], 3),
@@ -189,7 +190,7 @@ def test_start_game_same_players(db_session: Session, test_input: dict[str, list
         }
     }, 4),
 ])
-def test_play_game_same_players(db_session: Session, test_input: dict[str, list[int]], expected: int):
+def test_start_round_same_players(db_session: Session, test_input: dict[str, list[int]], expected: int):
     Session = sessionmaker(bind=db_session.bind)
 
     def thread_safe_new_game(game_id):
@@ -228,7 +229,7 @@ def test_play_game_same_players(db_session: Session, test_input: dict[str, list[
             session.close()
 
     new_db()
-    print("\n=====================\n", "test_play_game_same_players\n", sep="")
+    print("\n=====================\n", "test_start_round_same_players\n", sep="")
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Create games concurrently
@@ -294,4 +295,29 @@ def test_play_game_same_players(db_session: Session, test_input: dict[str, list[
 
             curr_players[game] = curr_player
 
-        drop_db()
+
+        cancel_game_futures = [executor.submit(thread_safe_cancel_game, game) for game in test_input["canceld"]]
+        started_round_games_futres = {}
+        game_data = test_input["game_data"]
+
+        
+        for game, curr_player in curr_players.items():
+            sleep(0.2)
+            curr_hints = game_data[game]["curr_hints"]
+            curr_answer = game_data[game]["curr_answer"]
+
+            started_round_games_futres[game] = executor.submit(thread_safe_start_round, curr_player, curr_hints, curr_answer)
+
+        game_started = []
+        valid_games = []
+        for game, future in started_round_games_futres.items():
+            res, err , _, game_id = future.result()
+            print("\n==========================\n", res, err, game_id, "\n==========================\n")
+
+            assert res is True
+            assert err == ""
+            valid_games.append(game)
+            game_started.append(game_id)
+        
+        assert sorted(game_started) == sorted(valid_games)
+

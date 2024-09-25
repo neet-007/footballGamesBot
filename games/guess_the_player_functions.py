@@ -1,7 +1,8 @@
-from sqlalchemy import delete, func, insert, or_, select, update
+from sqlalchemy import delete, func, insert, or_, select, text, update
 from sqlalchemy.orm import Session
 from db.connection import get_session
 from db.models import AskedQuestions, Game, GuessThePlayer, GuessThePlayerPlayer, guess_the_player_guess_the_player_player_association
+from utils.jaro_winkler import jaro_winkler_similarity
 
 session = get_session()
 
@@ -158,6 +159,7 @@ def start_round_guess_the_player(player_id:int, curr_hints:list[str], curr_answe
                 .order_by(
                     guess_the_player_guess_the_player_player_association.c.time_created.asc()
                 )
+                .with_for_update()
                 .limit(1)
             ).first()
             
