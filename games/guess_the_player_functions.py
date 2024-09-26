@@ -443,7 +443,7 @@ def end_round_guess_the_player(chat_id:int, session:Session):
         print(f"An error occurred: {e}")
         return False, "exception", -1
 
-def end_game_guess_the_player(chat_id:int):
+def end_game_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
