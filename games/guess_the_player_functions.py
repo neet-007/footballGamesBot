@@ -328,6 +328,7 @@ def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str, ses
             player_.answers -= 1
             if player_.answers == 0:
                 player_.muted = True
+                session.flush()
 
             score = jaro_winkler_similarity(answer.strip().lower(), guess_the_player.curr_answer)
             if (len(answer.lower().strip()) > 10 and score > 0.85) or (len(answer.lower().strip()) <= 10 and score > 0.92):
@@ -343,6 +344,7 @@ def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str, ses
                 )
                 .scalar()
             )
+
             if muted_players_count == guess_the_player.num_players - 1:
                 guess_the_player.state = 3
                 guess_the_player.winning_player_id = None

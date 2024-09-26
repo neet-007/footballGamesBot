@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from db.models import Base
 
+LEAN_SLEEP_TIME = 0.2
+HARSH_SLEEP_TIME = 0.1
+
 TURSO_DATABASE_URL = getenv("TURSO_DATABASE_URL", "://127.0.0.1:8080") 
 print("db url: ", TURSO_DATABASE_URL)
 
