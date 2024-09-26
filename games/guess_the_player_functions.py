@@ -355,7 +355,7 @@ def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str, ses
         print(f"An error occurred: {e}")
         return False, "exception"
 
-def end_round_guess_the_player(chat_id:int):
+def end_round_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():
             guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
