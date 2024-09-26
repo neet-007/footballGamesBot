@@ -140,6 +140,8 @@ def start_game_guess_the_player(chat_id:int, session:Session):
                 )
             )
     
+            guess_the_player.num_players = num_players
+
             return True, "", curr_player[0]
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -298,7 +300,7 @@ def answer_question_guess_the_player(chat_id:int, player_id:int, player_asked_id
         print(f"An error occurred: {e}")
         return False, "exception"
 
-def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str):
+def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str, session:Session):
     try:
         with session.begin():
             guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
