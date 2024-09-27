@@ -404,7 +404,7 @@ def rand_team_draft(chat_id:int, player_id:int, session:Session):
         print(f"An error occurred: {e}")
         return False, "expection", "", "", ""
 
-def end_game_draft(chat_id:int):
+def end_game_draft(chat_id:int, session:Session):
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
