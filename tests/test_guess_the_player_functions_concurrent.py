@@ -7,7 +7,6 @@ from db.connection import new_db
 from db.models import GuessThePlayer
 from games.guess_the_player_functions import cancel_game_guess_the_player, end_game_guess_the_player, end_round_guess_the_player, join_game_guess_the_player, new_game_guess_the_player, proccess_answer_guess_the_player, start_game_guess_the_player, start_round_guess_the_player
 from tests.conftest import LEAN_SLEEP_TIME
-from pprint import pprint
 
 def thread_safe_new_game(game_id, Session):
     session = Session()

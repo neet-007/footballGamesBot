@@ -1,6 +1,7 @@
 import logging
 from random import randint
 from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
 from db.connection import get_session
 from db.models import Draft, DraftPlayer, DraftPlayerTeam, Game, Team, draft_team_association
 
@@ -53,7 +54,7 @@ def get_vote_data(chat_id:int):
         print(f"An error occurred: {e}")
         return False, "exception", -1, None
 
-def new_game_draft(chat_id: int):
+def new_game_draft(chat_id: int, session:Session):
     logger.info("first log")
     try:
         with session.begin():
@@ -77,7 +78,7 @@ def new_game_draft(chat_id: int):
         print(f"An error occurred: {e}")
         return False, "exception"
 
-def join_game_draft(chat_id: int, player_id: int):
+def join_game_draft(chat_id: int, player_id: int, session:Session):
     try:
         with session.begin():
             draft = session.query(Draft).filter(Draft.chat_id == chat_id).first()
@@ -105,7 +106,7 @@ def join_game_draft(chat_id: int, player_id: int):
         print(f"An error occurred: {e}")
         return False, "exception"
 
-def start_game_draft(chat_id: int):
+def start_game_draft(chat_id: int, session:Session):
     try:
         with session.begin():
             draft = session.query(Draft).filter(Draft.chat_id == chat_id).first()
@@ -444,7 +445,7 @@ def end_game_draft(chat_id:int):
         print(f"An error occurred: {e}")
         return False, "exception", None, None
 
-def cancel_game_draft(chat_id:int):
+def cancel_game_draft(chat_id:int, session:Session):
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
