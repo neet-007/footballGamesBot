@@ -125,7 +125,7 @@ def start_game_draft(chat_id: int, session:Session):
 
             num_players = len(player_ids)
 
-            if num_players < 2 or num_players != draft.num_players:
+            if num_players < 2:
                 session.delete(draft)
                 session.query(Game).filter(Game.chat_id == chat_id).delete()
                 return False, "number of players is less than 2 or not as expected", -1
@@ -135,6 +135,7 @@ def start_game_draft(chat_id: int, session:Session):
                 teams.append(DraftPlayerTeam(player_id=player_id[0], chat_id=chat_id))
 
             draft.state = 1
+            draft.num_players = num_players
             session.add_all(teams)
 
             return True, "", num_players
@@ -142,7 +143,7 @@ def start_game_draft(chat_id: int, session:Session):
         print(f"An error occurred: {e}")
         return False, "exception", -1
 
-def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[str], formation:str):
+def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[str], formation:str, session:Session):
     try:
         with session.begin():
             game = session.query(Draft).filter(Draft.chat_id == chat_id).first()
@@ -211,7 +212,7 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
         print(f"An error occurred: {e}")
         return False, "expection", [-1]
 
-def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str):
+def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:Session):
     try:
         with session.begin():
             game = session.query(Draft).filter(Draft.chat_id == chat_id).first()
@@ -361,7 +362,7 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str):
         print(f"An error occurred: {e}")
         return False, "expection", [None, None, None, None]
 
-def rand_team_draft(chat_id:int, player_id:int):
+def rand_team_draft(chat_id:int, player_id:int, session:Session):
     try:
         with session.begin():
             game = session.query(Draft).filter(Draft.chat_id == chat_id).first()
