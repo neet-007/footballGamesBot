@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, PrimaryKeyConstraint, String, Table, UniqueConstraint, func, text
+from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, PrimaryKeyConstraint, String, Table, UniqueConstraint, func, null, text
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
 
 class Base(DeclarativeBase):
@@ -165,6 +165,28 @@ class DraftPlayerTeam(Base):
     p9: Mapped[str] = mapped_column(String(50), nullable=True)
     p10: Mapped[str] = mapped_column(String(50), nullable=True)
     p11: Mapped[str] = mapped_column(String(50), nullable=True)
+
+class DraftVote(Base):
+    __tablename__ = "draft_vote"
+    chat_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    message_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    questions: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    num_players: Mapped[int] = mapped_column(Integer, nullable=False)
+    answers: Mapped[int] = mapped_column(Integer, nullable=False)
+    players = relationship("DraftVotePlayer", uselist=False, backref="vote", cascade="all, delete-orphan")
+
+class DraftVotePlayer(Base):
+    __tablename__ = "draft_vote_player"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    draft_vote: Mapped[int] = mapped_column(Integer, ForeignKey("draft_vote.chat_id", ondelete="CASCADE"))
+    player_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    option_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    votes: Mapped[int] = mapped_column(Integer, default=0)
+
+    UniqueConstraint(
+        draft_vote,
+        player_id
+    )
 
 class RateLimits(Base):
     __tablename__ = "rate_limits"

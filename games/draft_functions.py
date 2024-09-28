@@ -1,8 +1,9 @@
 import logging
 from random import randint
+from typing import List, Union
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
-from db.models import Draft, DraftPlayer, DraftPlayerTeam, Game, Team, draft_team_association
+from db.models import Draft, DraftPlayer, DraftPlayerTeam, DraftVote, DraftVotePlayer, Game, Team, draft_team_association
 
 logger = logging.getLogger(__name__)
 
@@ -395,6 +396,83 @@ def rand_team_draft(chat_id:int, player_id:int, session:Session):
     except Exception as e:
         print(f"An error occurred: {e}")
         return False, "expection", "", "", ""
+
+def make_vote(chat_id:int, players, message_id:int, session:Session):
+    try:
+        with session.begin():
+            draft_num_players = session.query(Draft.num_players).filter(Draft.chat_id == chat_id).first()
+
+            if not draft_num_players:
+                return False, "no game found"
+        
+            draft_vote = DraftVote(
+                chat_id=chat_id,
+                num_players=draft_num_players[0],
+                questions=players[1],
+                message_id=message_id,
+                answers=0,
+            )
+            
+            session.add(draft_vote)
+            session.flush()  
+            
+            draft_vote_players = [
+                DraftVotePlayer(draft_vote=chat_id, player_id=player_id[0], option_id=i)
+                for i, player_id in enumerate(players[0])
+            ]
+            
+            session.bulk_save_objects(draft_vote_players)
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+
+def add_vote(chat_id:int, option_id:int, session:Session):
+    try:
+        with session.begin():
+            vote = session.query(DraftVote).filter(DraftVote.chat_id == chat_id).first()
+
+            if not vote:
+                return False, "no game found"
+        
+            (
+                session.query(DraftVotePlayer)
+                .filter(DraftVotePlayer.draft_vote == chat_id, DraftVotePlayer.option_id == option_id)
+                .update({
+                    DraftVotePlayer.votes: DraftVotePlayer.votes + 1
+                })
+            )
+
+            vote.answers += 1
+            session.flush()
+
+            if vote.answers == vote.num_players:
+                return True, "end vote"
+
+            return True, "continue"
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
+    
+def get_vote_results(chat_id:int, session:Session):
+    try:
+        with session.begin():
+            message_id = session.query(DraftVote.message_id).filter(DraftVote.chat_id == chat_id).first()
+            draft_votes_players = (
+                session.query(DraftVotePlayer.player_id, DraftVotePlayer.votes)
+                .filter(DraftVotePlayer.draft_vote == chat_id)
+                .all()
+            )
+    
+            if not message_id or not draft_votes_players:
+                return False, "no game", 0, {}
+
+            votes = {player_id_:vote_ for (player_id_, vote_) in draft_votes_players}
+            return True, "", message_id[0], votes
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception", 0, {}
 
 def end_game_draft(chat_id:int, session:Session):
     try:

@@ -29,7 +29,7 @@ sync_ptb = (
 )
 
 ptb.add_error_handler(error_handler)
-ptb.add_handler(RateLimitHandler(chack_rate_limit_handler))
+#ptb.add_handler(RateLimitHandler(chack_rate_limit_handler))
 ptb.add_handler(new_db_handler)
 #ptb.add_handler(guess_the_player_new_game_command_handler)
 #ptb.add_handler(guess_the_player_join_game_command_handler)
