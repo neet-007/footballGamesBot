@@ -2,7 +2,6 @@ import logging
 from random import randint
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
-from db.connection import get_session
 from db.models import Draft, DraftPlayer, DraftPlayerTeam, Game, Team, draft_team_association
 
 logger = logging.getLogger(__name__)
@@ -25,9 +24,8 @@ FORMATIONS = {
            "p11":"lst"}
 }
 
-session = get_session()
 
-def check_draft(chat_id:int):
+def check_draft(chat_id:int, session:Session):
     try:
         with session.begin():
             game = session.query(Draft.state, Draft.num_players).filter(Draft.chat_id == chat_id).first()
@@ -39,7 +37,7 @@ def check_draft(chat_id:int):
         print(f"An error occurred: {e}")
         return False, "", -1, -1
 
-def get_vote_data(chat_id:int):
+def get_vote_data(chat_id:int, session:Session):
     try:
         with session.begin():
             state = session.query(Draft.state).filter(Draft.chat_id == chat_id).first()

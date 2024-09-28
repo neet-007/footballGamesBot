@@ -8,6 +8,12 @@ from .conftest import new_db, drop_db
 @pytest.mark.parametrize("test_input, expected", [
     ([11, 22, 33], 3),
 ])
+def test_new_db(test_input, expected):
+    new_db()
+
+@pytest.mark.parametrize("test_input, expected", [
+    ([11, 22, 33], 3),
+])
 def test_create_different_games(db_session: Session, test_input: list[int], expected: int):
     new_db()
     print("\n=====================\n", "test_create_different_games\n", sep="")

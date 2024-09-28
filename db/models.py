@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, Table, UniqueConstraint, func, text
+from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, PrimaryKeyConstraint, String, Table, UniqueConstraint, func, text
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
 
 class Base(DeclarativeBase):
@@ -165,3 +165,20 @@ class DraftPlayerTeam(Base):
     p9: Mapped[str] = mapped_column(String(50), nullable=True)
     p10: Mapped[str] = mapped_column(String(50), nullable=True)
     p11: Mapped[str] = mapped_column(String(50), nullable=True)
+
+class RateLimits(Base):
+    __tablename__ = "rate_limits"
+    player_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    time_created: Mapped[datetime] = mapped_column(TIMESTAMP, default=func.now())
+
+class UserRateLimitTrack(Base):
+    __tablename__ = "user_rate_limit_track"
+    player_id: Mapped[int] = mapped_column(Integer)
+    time_created: Mapped[datetime] = mapped_column(TIMESTAMP, default=func.now())
+
+    PrimaryKeyConstraint(
+        player_id,
+        time_created
+    )
+
+

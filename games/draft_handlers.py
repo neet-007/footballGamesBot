@@ -16,8 +16,6 @@ NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_draft"
 EXCEPTION_ERROR = "internal error happend please try again later"
 STATE_ERROR = "game error happend\n or this is not the time for this command"
 
-session = get_session()
-
 def format_teams(teams:list[tuple[User, dict[str, str]]], formations:dict[str, str]):
     text = ""
     for player, team in teams:
@@ -30,7 +28,8 @@ async def handle_test_make_game(update: Update, context: ContextTypes.DEFAULT_TY
     if not update.effective_chat or not update.effective_user or not update.message or not context.job_queue or update.effective_chat.type == "private":
         return
 
-    res, err = new_game_draft(update.effective_chat.id)
+    with get_session() as session:
+        res, err = new_game_draft(update.effective_chat.id, session)
     if not res:
         if err == "a game has started in this chat":
             return await update.message.reply_text("a game has started in this chat cant make a new one")
@@ -51,7 +50,8 @@ async def handle_test_draft_reapting_join_job(context: ContextTypes.DEFAULT_TYPE
         return
 
     print("====================\n", "joooooooooooooooooin repppppppppppppt", "\n====================\n")
-    res, err, state, num_players = check_draft(context.job.chat_id)
+    with get_session() as session:
+        res, err, state, num_players = check_draft(context.job.chat_id, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
@@ -73,7 +73,8 @@ async def handle_test_draft_start_game_job(context: ContextTypes.DEFAULT_TYPE):
         return
 
     remove_jobs(f"draft_reapting_join_job_{context.job.chat_id}", context)
-    res, err, num_players = start_game_draft(context.job.chat_id)
+    with get_session() as session:
+        res, err, num_players = start_game_draft(context.job.chat_id, session)
     if not res:
         if err == "no game":
             return await context.bot.send_message(text=NO_GAME_ERROR, chat_id=context.job.chat_id)
@@ -101,7 +102,8 @@ async def handle_test_join_game(update: Update, _: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or not update.effective_user or not update.message or update.effective_chat.type == "private":
         return
 
-    res, err = join_game_draft(update.effective_chat.id, update.effective_user.id)
+    with get_session() as session:
+        res, err = join_game_draft(update.effective_chat.id, update.effective_user.id, session)
     if not res:
         if err == "no game":
             return await update.message.reply_text(text=NO_GAME_ERROR)
@@ -124,7 +126,8 @@ async def handle_test_draft_join_callback(update: Update, context: ContextTypes.
     q = update.callback_query
     await q.answer()
 
-    res, err = join_game_draft(update.effective_chat.id, update.effective_user.id)
+    with get_session() as session:
+        res, err = join_game_draft(update.effective_chat.id, update.effective_user.id, session)
     if not res:
         if err == "no game":
             return await context.bot.send_message(text=NO_GAME_ERROR,
@@ -151,7 +154,8 @@ async def handle_test_start_game(update: Update, context: ContextTypes.DEFAULT_T
 
     remove_jobs(f"draft_reapting_join_job_{update.effective_chat.id}", context)
     remove_jobs(f"draft_start_game_job_{update.effective_chat.id}", context)
-    res, err, num_players= start_game_draft(update.effective_chat.id)
+    with get_session() as session:
+        res, err, num_players= start_game_draft(update.effective_chat.id, session)
     if not res:
         if err == "no game":
             return await update.message.reply_text(text=NO_GAME_ERROR)
@@ -178,7 +182,8 @@ async def handle_test_draft_reapting_statement_job(context: ContextTypes.DEFAULT
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    res, err,  state, _ = check_draft(context.job.chat_id)
+    with get_session() as session:
+        res, err,  state, _ = check_draft(context.job.chat_id, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
@@ -199,7 +204,8 @@ async def handle_test_draft_set_state_command_job(context: ContextTypes.DEFAULT_
         return
 
     remove_jobs(f"draft_reapting_statement_job_{context.job.chat_id}", context)
-    res, err,  state, num_players = check_draft(context.job.chat_id)
+    with get_session() as session:
+        res, err,  state, num_players = check_draft(context.job.chat_id, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
@@ -223,8 +229,9 @@ async def handle_test_set_state(update: Update, context: ContextTypes.DEFAULT_TY
     if len(text) != 3:
         return await update.message.reply_text("there is something missing")
 
-    res, err, other = set_game_states_draft(update.effective_chat.id, update.effective_user.id,
-                            text[0].strip(), text[1].split("-"), text[2].strip())
+    with get_session() as session:
+        res, err, other = set_game_states_draft(update.effective_chat.id, update.effective_user.id,
+                                text[0].strip(), text[1].split("-"), text[2].strip(), session)
     if not res:
         if err == "game error":
             return await update.message.reply_text(EXCEPTION_ERROR)
@@ -261,7 +268,8 @@ async def handle_test_draft_pick_team_callback(update: Update, context: ContextT
     q = update.callback_query
     await q.answer()
     
-    res, err, team, formation, curr_pos = rand_team_draft(update.effective_chat.id, update.effective_user.id)
+    with get_session() as session:
+        res, err, team, formation, curr_pos = rand_team_draft(update.effective_chat.id, update.effective_user.id, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(text=NO_GAME_ERROR,
@@ -288,8 +296,9 @@ async def handle_test_draft_add_pos(update: Update, context: ContextTypes.DEFAUL
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
         return
 
-    res, status, other = add_pos_to_team_draft(update.effective_chat.id, update.effective_user.id,
-                                        update.message.text.lower().strip())
+    with get_session() as session:
+        res, status, other = add_pos_to_team_draft(update.effective_chat.id, update.effective_user.id,
+                                            update.message.text.lower().strip(), session)
     if not res:
         if status == "no game found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -350,7 +359,8 @@ async def handle_test_draft_reapting_votes_job(context: ContextTypes.DEFAULT_TYP
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    res, err, state, _ = check_draft(context.job.chat_id)
+    with get_session() as session:
+        res, err, state, _ = check_draft(context.job.chat_id, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
@@ -374,7 +384,8 @@ async def handle_test_draft_start_votes_command(update: Update, context: Context
     remove_jobs(f"draft_reapting_votes_job_{update.effective_chat.id}", context)
     remove_jobs(f"draft_reapting_votes_end_job_{update.effective_chat.id}", context)
     chat_id = update.effective_chat.id
-    res, err, state, players_ids = get_vote_data(chat_id)
+    with get_session() as session:
+        res, err, state, players_ids = get_vote_data(chat_id, session)
     if not res:
         if err == "no game":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -420,7 +431,8 @@ async def handle_test_draft_reapting_votes_end_job(context: ContextTypes.DEFAULT
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    res, err, state, _ = check_draft(context.job.chat_id)
+    with get_session() as session:
+        res, err, state, _ = check_draft(context.job.chat_id, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
@@ -445,7 +457,8 @@ async def handle_test_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
     remove_jobs(f"draft_reapting_votes_end_job_{context.job.chat_id}", context)
     
     chat_id = context.job.data["game_id"]
-    res, err, state, players_ids = get_vote_data(chat_id)
+    with get_session() as session:
+        res, err, state, players_ids = get_vote_data(chat_id, session)
     if not res:
         if err == "no game":
             return await context.bot.send_message(chat_id==chat_id, text=NO_GAME_ERROR)
@@ -494,7 +507,8 @@ async def handle_test_draft_vote_recive(update: Update, context: ContextTypes.DE
     answer = update.poll_answer
     poll_data = context.bot_data[f"poll_{answer.poll_id}"]
     chat_id = poll_data["chat_id"]
-    res, err, _, num_players = check_draft(chat_id)
+    with get_session() as session:
+        res, err, _, num_players = check_draft(chat_id, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(chat_id=chat_id,
@@ -528,7 +542,8 @@ async def handle_test_draft_end_votes_command(update: Update, context: ContextTy
     chat_id = poll_data["chat_id"]
 
     votes = poll_data["votes_count"]
-    res, err, players_and_teams, formation = end_game_draft(chat_id)
+    with get_session() as session:
+        res, err, players_and_teams, formation = end_game_draft(chat_id, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(text=NO_GAME_ERROR, chat_id=chat_id)
@@ -583,7 +598,8 @@ async def handle_test_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
     chat_id = poll_data["chat_id"]
 
     votes = poll_data["votes_count"]
-    res, err, players_and_teams, formation = end_game_draft(chat_id)
+    with get_session() as session:
+        res, err, players_and_teams, formation = end_game_draft(chat_id, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(text=NO_GAME_ERROR, chat_id=chat_id)
@@ -653,7 +669,8 @@ async def handle_test_draft_cancel_game(update: Update, context: ContextTypes.DE
     if not update.effective_chat or not update.message:
         return
 
-    res, err = cancel_game_draft(update.effective_chat.id)
+    with get_session() as session:
+        res, err = cancel_game_draft(update.effective_chat.id, session)
     if not res:
         if err == "no game found":
             return await update.message.reply_text(NO_GAME_ERROR)

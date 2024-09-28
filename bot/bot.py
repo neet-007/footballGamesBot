@@ -1,7 +1,9 @@
+from telegram import Update
 from telegram.ext import Application
 from dotenv import load_dotenv
 from os import getenv
 from sys import exit
+from bot.shared_handlers import RateLimitHandler, chack_rate_limit_handler
 from games.draft_handlers import random_team_draft_game_callback_handler, make_game_test_handler, join_game_test_handler, start_game_test_handler, set_game_test_handler, position_draft_message_test_handler, cancel_game_test_handler, vote_recive_poll_answer_test_handler, end_vote_game_test_handler, join_game_callback_test_handler, start_vote_game_test_handler
 from games.guess_the_player_handlers import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, handle_dispatch_messages, new_db_handler, guess_the_player_dispatch_handler
 
@@ -27,7 +29,7 @@ sync_ptb = (
     .build()
 )
 
-
+ptb.add_handler(RateLimitHandler(chack_rate_limit_handler))
 ptb.add_handler(new_db_handler)
 #ptb.add_handler(guess_the_player_new_game_command_handler)
 #ptb.add_handler(guess_the_player_join_game_command_handler)
