@@ -291,22 +291,16 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                     query_results = (
                         session.query(
                             DraftPlayerTeam.player_id,
+                            DraftPlayer.player_id.label("actual_player_id"),
                             *[getattr(DraftPlayerTeam, f'p{i}') for i in range(1, 12)]
                         )
+                        .join(DraftPlayer, DraftPlayer.id == DraftPlayerTeam.player_id)
                         .filter(DraftPlayerTeam.chat_id == chat_id)
                         .all()
                     )
-
-                    player_ids = [result[0] for result in query_results]
-
-                    players = (
-                        session.query(DraftPlayer.player_id)
-                        .filter(DraftPlayer.id.in_(player_ids))
-                        .all()
-                    )
-                    player_dict = {player_ids[i]: players[i] for i in range (len(players))}
+                    
                     teams = [
-                        (player_dict[result[0]][0], {f'p{i+1}': result[i+1] for i in range(11)})
+                        (result.actual_player_id, {f'p{i+1}': result[i+2] for i in range(11)})
                         for result in query_results
                     ]
                     other = [curr_player.player_id, game.formation_name, game.curr_pos, teams]
@@ -416,25 +410,19 @@ def end_game_draft(chat_id:int, session:Session):
             query_results = (
                 session.query(
                     DraftPlayerTeam.player_id,
+                    DraftPlayer.player_id.label("actual_player_id"),
                     *[getattr(DraftPlayerTeam, f'p{i}') for i in range(1, 12)]
                 )
+                .join(DraftPlayer, DraftPlayer.id == DraftPlayerTeam.player_id)
                 .filter(DraftPlayerTeam.chat_id == chat_id)
                 .all()
             )
-
-            player_ids = [result[0] for result in query_results]
-
-            players = (
-                session.query(DraftPlayer.player_id)
-                .filter(DraftPlayer.id.in_(player_ids))
-                .all()
-            )
-            player_dict = {player_ids[i]: players[i] for i in range (len(players))}
+            
             teams = [
-                (player_dict[result[0]][0], {f'p{i+1}': result[i+1] for i in range(11)})
+                (result.actual_player_id, {f'p{i+1}': result[i+2] for i in range(11)})
                 for result in query_results
             ]
-            if not players or not formation:
+            if not teams or not formation:
                 session.delete(game)
                 session.delete(draft)
                 return False, "no players no formation" , None, None

@@ -5,7 +5,6 @@ import concurrent.futures
 from db.connection import new_db
 from games.draft_functions import end_game_draft, new_game_draft, join_game_draft, cancel_game_draft, start_game_draft, set_game_states_draft, add_pos_to_team_draft, rand_team_draft
 from tests.conftest import LEAN_SLEEP_TIME
-import uuid
 from pprint import pprint
 
 POSITIONS = 11
@@ -187,7 +186,7 @@ def test_set_state_same_players(db_session: Session, test_input: dict[str, dict[
         state_set_games_futres = {}
 
         for game in valid_games:
-            sleep(LEAN_SLEEP_TIME)
+            #sleep(LEAN_SLEEP_TIME)
             category = game_data[game]["category"]
             formation = game_data[game]["formation"]
             teams= game_data[game]["teams"]
@@ -330,7 +329,7 @@ def test_add_pos_to_team_same_players(db_session: Session, test_input: dict[str,
         state_set_games_futres = {}
 
         for game in valid_games:
-            sleep(LEAN_SLEEP_TIME)
+            #sleep(LEAN_SLEEP_TIME)
             category = game_data[game]["category"]
             formation = game_data[game]["formation"]
             teams= game_data[game]["teams"]
@@ -354,7 +353,14 @@ def test_add_pos_to_team_same_players(db_session: Session, test_input: dict[str,
             picking_players[game] = other[-1]
             curr_players[game] = other[-1]
         
-        players_teams = {game:[tuple([player_id, {f"p{x}":"" for x in range(1, 12)}]) for player_id in test_input["players"]] for game in valid_games}
+        players_teams = {}
+        for game in valid_games:
+            new_list = []
+            for player_id in test_input["players"]:
+                new_list.append(tuple([player_id, {f"p{x}":"" for x in range(1, 12)}]))
+
+            players_teams[game] = new_list
+
         for pos in range(POSITIONS):
             rand_teams_futures = {}
             for game, curr_player in picking_players.items():
@@ -377,7 +383,7 @@ def test_add_pos_to_team_same_players(db_session: Session, test_input: dict[str,
             for i in range(num_players):
 
                 for game, curr_player in curr_players.items():
-                    added_player = str(uuid.uuid4())[:50]
+                    added_player = f"{game}{curr_player}p{pos + 1}"
                     for item in players_teams[game]:
                         if item[0] == curr_player:
                             item[1][f"p{pos + 1}"] = added_player
@@ -541,7 +547,7 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
         state_set_games_futres = {}
 
         for game in valid_games:
-            sleep(LEAN_SLEEP_TIME)
+            #sleep(LEAN_SLEEP_TIME)
             category = game_data[game]["category"]
             formation = game_data[game]["formation"]
             teams= game_data[game]["teams"]
@@ -566,7 +572,6 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
             curr_players[game] = other[-1]
         
         players_teams = {}
-        #players_teams = {game:[tuple([player_id, {f"p{x}":"" for x in range(1, 12)}]) for player_id in test_input["players"]] for game in valid_games}
         for game in valid_games:
             new_list = []
             for player_id in test_input["players"]:
@@ -596,7 +601,6 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
             for i in range(num_players):
 
                 for game, curr_player in curr_players.items():
-                    #added_player = str(uuid.uuid4())[:50]
                     added_player = f"{game}{curr_player}p{pos + 1}"
                     for item in players_teams[game]:
                         if item[0] == curr_player:
@@ -621,18 +625,15 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                             assert (isinstance(tup, tuple)) is True
                             assert (tup[0] in test_input["players"]) is True
                             assert (isinstance(tup[1], dict)) is True
-                        """
-                        for game_, team in players_teams.items():
-                            print("\n==========================\n", "db first", "\n==========================\n")
-                            print("\n                          \n", "db", "\n                          \n")
-                            pprint(sorted(other[3], key=lambda x: x[0]))
-                            print("\n                          \n", "test", "\n                          \n")
-                            pprint(sorted(team, key=lambda x: x[0]))
-                            print("\n==========================\n", "test sconed", "\n==========================\n")
-                        """
-                        #assert (sorted(other[3], key=lambda x: x[0]) == sorted(players_teams[game], key=lambda x: x[0]))
+                        print("\n==========================\n", "dicts", "\n==========================\n")
+                        print("\n                          \n", "db", "\n                          \n")
+                        pprint(sorted(other[3], key=lambda x: x[0]))
+                        print("\n                          \n", "test", "\n                          \n")
+                        pprint(sorted(players_teams[game], key=lambda x: x[0]))
+                        print("\n==========================\n", "dicts", "\n==========================\n")
+                        assert (sorted(other[3], key=lambda x: x[0]) == sorted(players_teams[game], key=lambda x: x[0]))
+
                     elif err == "new_pos":
-                        print("\n==========================\n", "\n==========================\n", "heer", "\n==========================\n", "\n==========================\n")
                         curr_players[game] = other[0]
                         picking_players[game] = other[0]
 
@@ -646,7 +647,6 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
 
                         curr_players[game] = other[0]
 
-        """
         end_games_futures = {}
         for game in valid_games:
             end_games_futures[game] = executor.submit(thread_safe_end_game, game, Session)
@@ -659,10 +659,7 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
             assert err == ""
             assert formation == formation_name
             assert (sorted(teams, key=lambda x: x[0]) == sorted(players_teams[game], key=lambda x: x[0]))
-        """
 
-
-        pprint(players_teams)
         print("=====================\n")
 
 
