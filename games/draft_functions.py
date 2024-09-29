@@ -1,6 +1,5 @@
 import logging
 from random import randint
-from typing import List, Union
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from db.models import Draft, DraftPlayer, DraftPlayerTeam, DraftVote, DraftVotePlayer, Game, Team, draft_team_association

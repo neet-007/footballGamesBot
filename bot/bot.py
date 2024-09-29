@@ -1,8 +1,8 @@
-from telegram.ext import Application, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from dotenv import load_dotenv
 from os import getenv
 from sys import exit
-from bot.shared_handlers import error_handler, message_dispatcher
+from bot.shared_handlers import error_handler, handle_help, handle_start, message_dispatcher
 from games.draft_handlers import random_team_draft_game_callback_handler, make_game_test_handler, join_game_test_handler, start_game_test_handler, set_game_test_handler, cancel_game_test_handler, vote_recive_poll_answer_test_handler, end_vote_game_test_handler, join_game_callback_test_handler, start_vote_game_test_handler
 from games.guess_the_player_handlers import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, new_db_handler
 
@@ -30,9 +30,14 @@ sync_ptb = (
 
 
 message_dispatch_handler = MessageHandler((filters.TEXT & ~filters.COMMAND), message_dispatcher)
+help_handler = CommandHandler("help", handle_help)
+start_handler = CommandHandler("start", handle_start)
 
+ptb.add_handler(help_handler)
+ptb.add_handler(start_handler)
 ptb.add_error_handler(error_handler)
 ptb.add_handler(new_db_handler)
+
 ptb.add_handler(guess_the_player_new_game_command_handler)
 ptb.add_handler(guess_the_player_join_game_command_handler)
 ptb.add_handler(guess_the_player_join_game_callback_handler)
