@@ -8,6 +8,26 @@ import traceback
 from json import dumps
 from html import escape
 
+from games.draft_handlers import handle_test_draft_add_pos
+from games.guess_the_player_handlers import handle_test_guess_the_player_answer_question_command, handle_test_guess_the_player_proccess_answer_command, handle_test_guess_the_player_start_round
+
+async def message_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or not update.effective_user or not update.message or not update.message.text:
+        return
+
+    if update.effective_chat.type == "private":
+        return await handle_test_guess_the_player_start_round(update, context)
+
+    message_text = update.message.text.strip().lower()
+    if update.message.reply_to_message:
+        return await handle_test_guess_the_player_answer_question_command(update, context)
+    if message_text.startswith("answer is"):
+        return await handle_test_guess_the_player_proccess_answer_command(update, context)
+    if message_text.startswith("player"):
+        return await handle_test_draft_add_pos(update, context)
+    else:
+        await update.message.reply_text("if you are in guess the player game start answer with 'answer is'\nif you are in draft game start player added with 'player'")
+
 def check_rate_limit_function(player_id):
         with get_session() as session:
             res, err = check_rate_limit(player_id, session)

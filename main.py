@@ -53,6 +53,6 @@ async def process_update(request: Request):
     return Response(status_code=200)
 
 @app.get("/api/health")
-def home():
-    print("testest")
+def check_health():
+     return {"status": "ok"}  
 

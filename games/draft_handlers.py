@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, User, Update
 from telegram.constants import ParseMode
-from telegram.ext import ContextTypes, filters
+from telegram.ext import ContextTypes
 from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext._handlers.commandhandler import CommandHandler
-from telegram.ext._handlers.messagehandler import MessageHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
 
 from db.connection import get_session
@@ -297,7 +296,7 @@ async def handle_test_draft_add_pos(update: Update, context: ContextTypes.DEFAUL
 
     with get_session() as session:
         res, status, other = add_pos_to_team_draft(update.effective_chat.id, update.effective_user.id,
-                                            update.message.text.lower().strip(), session)
+                                            update.message.text.lower().strip().replace("player", ""), session)
     if not res:
         if status == "no game found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -706,7 +705,6 @@ set_game_test_handler = CommandHandler("test_set", handle_test_set_state)
 cancel_game_test_handler = CommandHandler("test_cancel", handle_test_draft_cancel_game)
 end_vote_game_test_handler = CommandHandler("test_end_vote", handle_test_draft_end_votes_command)
 start_vote_game_test_handler = CommandHandler("test_start_vote", handle_test_draft_start_votes_command)
-position_draft_message_test_handler = MessageHandler((filters.TEXT & ~filters.COMMAND), handle_test_draft_add_pos)
 vote_recive_poll_answer_test_handler = PollAnswerHandler(handle_test_draft_vote_recive)
 join_game_callback_test_handler = CallbackQueryHandler(callback=handle_test_draft_join_callback, pattern="^draft_join$")
 random_team_draft_game_callback_handler = CallbackQueryHandler(callback=handle_test_draft_pick_team_callback, pattern="^draft_random_team$")

@@ -97,7 +97,6 @@ def start_game_guess_the_player(chat_id:int, session:Session):
 
             num_players = len(player_ids)
 
-            print("\n============================\n", num_players, guess_the_player.num_players, "\n============================\n")
             if num_players < 2:
                 (
                     session.query(Game)

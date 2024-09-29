@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
-from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
 
 from db.connection import get_session, new_db
 from games.guess_the_player_functions import answer_question_guess_the_player, ask_question_guess_the_player, cancel_game_guess_the_player, check_guess_the_player, end_game_guess_the_player, end_round_guess_the_player, get_asked_questions_guess_the_player, join_game_guess_the_player, leave_game_guess_the_player, new_game_guess_the_player, proccess_answer_guess_the_player, start_game_guess_the_player, start_round_guess_the_player
@@ -268,7 +268,7 @@ async def handle_test_guess_the_player_proccess_answer_command(update: Update, c
 
     with get_session() as session:
         res, err = proccess_answer_guess_the_player(update.effective_chat.id, update.effective_user.id,
-                                                    update.message.text.replace("/answer_player_guess_the_player", "").lower().strip(), session)
+                                                    update.message.text.lower().strip().replace("answer is", ""), session)
     if not res:
         if err == "game not found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -357,17 +357,6 @@ async def handle_test_guess_the_player_end_game_job(context: ContextTypes.DEFAUL
 
     return await context.bot.send_message(text=f"scores:\n{text}\nwinners:\n{winners_text}", chat_id=context.job.chat_id, parse_mode=ParseMode.HTML)
 
-async def handle_dispatch_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text or not update.effective_chat or not update.effective_user:
-        return
-
-    if update.effective_chat.type == "private":
-        return await handle_test_guess_the_player_start_round(update, context)
-    if update.message.reply_to_message:
-        return await handle_test_guess_the_player_answer_question_command(update, context)
-    else:
-        return await handle_test_guess_the_player_proccess_answer_command(update, context)
-
 async def handle_test_guess_the_player_leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat or not update.effective_user or not context.job_queue:
         return
@@ -439,8 +428,6 @@ guess_the_player_new_game_command_handler = CommandHandler("new_guess_the_player
 guess_the_player_join_game_command_handler = CommandHandler("join_guess_the_player", handle_test_guess_the_player_join_command)
 guess_the_player_start_game_command_handler = CommandHandler("start_game_guess_the_player", handle_test_guess_the_player_start_game_command)
 guess_the_player_ask_question_command_handler = CommandHandler("ask_q_guess_the_player", handle_test_guess_the_player_ask_question_command)
-guess_the_player_dispatch_handler = MessageHandler((filters.TEXT & ~filters.COMMAND), handle_dispatch_messages)
-#guess_the_player_proccess_answer_command_handler = MessageHandler((telegram.ext.filters.TEXT & ~ telegram.ext.filters.COMMAND), handle_guess_the_player_proccess_answer_command)
 guess_the_player_leave_game_command_handler = CommandHandler("leave_game_guess_the_player", handle_test_guess_the_player_leave_game)
 guess_the_player_cancel_game_command_handler = CommandHandler("cancel_guess_the_player", handle_test_guess_the_player_cancel_game)
 guess_thE_player_get_questions_command_handler = CommandHandler("get_questions_guess_the_player", handle_test_guess_the_player_get_questions)
