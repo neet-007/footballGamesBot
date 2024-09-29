@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, PrimaryKeyConstraint, String, Table, UniqueConstraint, func, null, text
+from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, PrimaryKeyConstraint, String, Table, UniqueConstraint, func, text
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
 
 class Base(DeclarativeBase):
@@ -169,11 +169,11 @@ class DraftPlayerTeam(Base):
 class DraftVote(Base):
     __tablename__ = "draft_vote"
     chat_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    poll_id: Mapped[str] = mapped_column(String(100))
     message_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    questions: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     num_players: Mapped[int] = mapped_column(Integer, nullable=False)
     answers: Mapped[int] = mapped_column(Integer, nullable=False)
-    players = relationship("DraftVotePlayer", uselist=False, backref="vote", cascade="all, delete-orphan")
+    players = relationship("DraftVotePlayer", backref="vote", cascade="all, delete-orphan")
 
 class DraftVotePlayer(Base):
     __tablename__ = "draft_vote_player"

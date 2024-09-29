@@ -6,7 +6,7 @@ from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
-
+from pprint import pprint
 from db.connection import get_session
 from games.draft_functions import FORMATIONS, add_pos_to_team_draft, add_vote, cancel_game_draft, check_draft, end_game_draft, get_vote_data, get_vote_results, join_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft
 from utils.helpers import remove_jobs
@@ -49,7 +49,6 @@ async def handle_test_draft_reapting_join_job(context: ContextTypes.DEFAULT_TYPE
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
-    print("====================\n", "joooooooooooooooooin repppppppppppppt", "\n====================\n")
     with get_session() as session:
         res, err, state, num_players = check_draft(context.job.chat_id, session)
     if not res:
@@ -485,7 +484,7 @@ async def handle_test_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
                                 is_anonymous=False, allows_multiple_answers=False)
 
     with get_session() as session:
-        res, err = make_vote(chat_id, players, message.message_id, session)
+        res, err = make_vote(chat_id, players[0], message.message_id, message.poll.id, session)
         if not res:
             if err == "no game found":
                 return await context.bot.send_message(chat_id=chat_id, text=NO_GAME_ERROR)
@@ -516,23 +515,18 @@ async def handle_test_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
                                name=f"draft_end_votes_job_{context.job.chat_id}")
 
 async def handle_test_draft_vote_recive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.poll_answer or not context.job_queue or not update.effective_chat:
+    print("vooooooooooote befor check")
+    if not update.poll_answer or not context.job_queue:
         return
 
     answer = update.poll_answer
     #poll_data = context.bot_data[f"poll_{answer.poll_id}"]
-    chat_id = update.effective_chat.id
-    with get_session() as session:
-        res, err, _, num_players = check_draft(chat_id, session)
-    if not res:
-        if err == "no game found":
-            return await context.bot.send_message(chat_id=chat_id,
-                                                  text=NO_GAME_ERROR)
-        return await context.bot.send_message(chat_id=chat_id,
-                                              text=EXCEPTION_ERROR)
+    poll_id = answer.poll_id
 
+    print("cheeeeeeeeeeeing options")
     with get_session() as session:
-        res, err = add_vote(chat_id, answer.option_ids[0], session)
+        print("\n==========================\n", answer.option_ids[0], "\n==========================\n")
+        res, err, chat_id = add_vote(poll_id, answer.option_ids[0], session)
 
     if not res:
         if err == "no game found":
@@ -641,14 +635,17 @@ async def handle_test_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
 
     if not players_and_teams or not formation:
         return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
-    
+    """
     players = []
     for id, _ in players_and_teams:
         player = await context.bot.get_chat_member(chat_id=chat_id, user_id=id)
         players.append(player.user.full_name)
 
     username_to_id = {players[i]:players_and_teams[i][0] for i in range(len(players))}
+    pprint(votes)
+    pprint(username_to_id)
     votes = {username_to_id[username]:count for username, count in votes.items()}
+    """
 
     max_vote = float("-inf")
     max_vote_ids = []
@@ -664,7 +661,6 @@ async def handle_test_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
         max_vote_ids[i] = (winner.user, players_and_teams[i][1])
 
     await context.bot.stop_poll(chat_id=chat_id, message_id=message_id)
-    print(formation)
     data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
     context.job_queue.run_once(handle_test_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
                                name=f"draft_end_game_job_{chat_id}")
