@@ -400,27 +400,31 @@ async def handle_test_draft_start_votes_command(update: Update, context: Context
     if not players_ids:
         return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
 
-    players = []
+
+    players = [[], []]
     for id in players_ids:
         player = await context.bot.get_chat_member(chat_id, id[0])
-        players.append(player.user.full_name)
+        players[0].append(id)
+        players[1].append(player.user.full_name)
 
-    poll_data = {
-        "chat_id":chat_id,
-        "questions":players,
-        "votes_count":{player:0 for player in players},
-        "answers":0
-    }
-    message = await context.bot.send_poll(question="you has the best team" ,options=poll_data["questions"], chat_id=chat_id,
+
+    message = await context.bot.send_poll(question="you has the best team" ,options=players[1], chat_id=chat_id,
                                 is_anonymous=False, allows_multiple_answers=False)
 
-    poll_data["message_id"] = message.message_id
+    with get_session() as session:
+        res, err = make_vote(chat_id, players[0], message.message_id, message.poll.id, session)
+        if not res:
+            if err == "no game found":
+                return await context.bot.send_message(chat_id=chat_id, text=NO_GAME_ERROR)
+            if err == "exception":
+                return await context.bot.send_message(chat_id=chat_id, text=EXCEPTION_ERROR)
+            else:
+                return await context.bot.send_message(chat_id=chat_id, text=EXCEPTION_ERROR)
+
     if not message.poll:
         return
 
-    context.bot_data[f"poll_{message.poll.id}"] = poll_data
-    context.bot_data[f"poll_{chat_id}"] = poll_data
-    data = {"game_id":chat_id, "time":datetime.now(), "poll_id":message.poll.id}
+    data = {"game_id":chat_id, "time":datetime.now()}
     context.job_queue.run_repeating(handle_test_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id,
                                     name=f"draft_reapting_votes_end_job_{update.effective_chat.id}")
     context.job_queue.run_once(handle_test_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,
@@ -631,8 +635,12 @@ async def handle_test_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
         winner = await context.bot.get_chat_member(chat_id=chat_id, user_id=id[0])
         max_vote_ids[i] = (winner.user, players_and_teams[i][1])
 
+    is_won = True
+    if max_vote == 0 or max_vote == float("-inf"):
+        is_won = False
+
     await context.bot.stop_poll(chat_id=chat_id, message_id=message_id)
-    data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
+    data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation], "is_won":is_won}
     context.job_queue.run_once(handle_test_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
                                name=f"draft_end_game_job_{chat_id}")
 
@@ -645,11 +653,17 @@ async def handle_test_draft_end_game_job(context: ContextTypes.DEFAULT_TYPE):
 
     winners = context.job.data["winners"]
     formation = context.job.data["formation"]
+    is_won = context.job.data["is_won"]
     
     if not isinstance(winners, list):
         return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
     if not isinstance(formation, dict):
         return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
+    if not isinstance(is_won, bool):
+        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
+
+    if not is_won:
+        return await context.bot.send_message(text=f"the are no winners,\nno one voted", chat_id=context.job.chat_id)
 
     winners_text = ""
     teams = []
