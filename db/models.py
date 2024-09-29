@@ -40,6 +40,8 @@ class GuessThePlayer(Base):
     curr_answer:Mapped[str] = mapped_column(String(40), default="")
     curr_question:Mapped[str] = mapped_column(String(40), default="")
     state: Mapped[int] = mapped_column(Integer, default=0)
+    num_rounds: Mapped[int] = mapped_column(Integer, default=2)
+    curr_round: Mapped[int] = mapped_column(Integer, default=1)
     curr_hints: Mapped[list[str]] = mapped_column(JSON, default=["", "", ""])
 
     game = relationship("Game", uselist=False, cascade="all, delete-orphan")

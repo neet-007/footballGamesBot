@@ -15,16 +15,24 @@ def check_guess_the_player(chat_id:int, session:Session):
         print(f"An error occurred: {e}")
         return False, "exception", -1, -1
 
-def new_game_guess_the_player(chat_id:int, session:Session):
+def new_game_guess_the_player(chat_id:int, num_rounds:int | None, session:Session):
     try:
         with session.begin():
             game = session.query(Game).filter(Game.chat_id == chat_id).first()
             if game:
                 return False, "a game has started"
 
-            guess_the_player = GuessThePlayer(
-                chat_id=chat_id,
-            )
+            if num_rounds:
+                if num_rounds < 1:
+                    return False, "num of rounds less than 1"
+                guess_the_player = GuessThePlayer(
+                    chat_id=chat_id,
+                    num_rounds=num_rounds
+                )
+            else:
+                guess_the_player = GuessThePlayer(
+                    chat_id=chat_id,
+                )
             game = Game(
                 chat_id=chat_id,
             )
@@ -414,6 +422,53 @@ def end_round_guess_the_player(chat_id:int, session:Session):
             guess_the_player.state = 3
 
             if not next_player:
+                print(guess_the_player.curr_round, guess_the_player.num_rounds)
+                if guess_the_player.curr_round < guess_the_player.num_rounds:
+                    (
+                        session.query(GuessThePlayerPlayer).
+                        filter(GuessThePlayerPlayer.guess_the_player_id == chat_id)
+                        .update(
+                            {
+                                "muted": False,
+                                "questions": 3,
+                                "answers": 2,
+                                "picked":False,
+                            }
+                        )
+                    )
+                
+                    session.flush()
+
+                    next_player = (
+                            session.query(GuessThePlayerPlayer.id, GuessThePlayerPlayer.player_id)
+                            .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id,
+                                    GuessThePlayerPlayer.picked == False)
+                            .order_by(GuessThePlayerPlayer.time_join.asc())  
+                            .first()
+                    )
+                    if not next_player:
+                        return False, "player not in game", -1
+                    
+                    (
+                        session.query(GuessThePlayerPlayer)
+                        .filter(GuessThePlayerPlayer.id == next_player[0])
+                        .update({"picked":True})
+                    )
+
+                    guess_the_player.current_player_id = next_player[0]
+
+                    session.execute(
+                        insert(guess_the_player_guess_the_player_player_association).values(
+                            guess_the_player_id=guess_the_player.chat_id,
+                            guess_the_player_player_id=guess_the_player.current_player_id,
+                            guess_the_player_player_player_id=next_player[1],
+                            time_created=func.now()
+                        )
+                    )
+                    guess_the_player.curr_round += 1
+                    guess_the_player.state = 1
+                    return True, "new round", next_player[1]
+
                 return True, "game end", -1
 
             (

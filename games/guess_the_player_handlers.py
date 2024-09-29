@@ -13,14 +13,24 @@ EXCEPTION_ERROR = "internal error happend please try again later"
 STATE_ERROR = "game error happend\n or this is not the time for this command"
 
 async def handle_test_guess_the_player_new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
+    if not update.message or not update.message.text or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
         return
 
     with get_session() as session:
-        res, err = new_game_guess_the_player(update.effective_chat.id, session)
+        num_rounds = update.message.text.replace("/new_guess_the_player", "").strip() or None
+
+        if num_rounds is not None:
+            try:
+                num_rounds = int(num_rounds)
+            except ValueError:
+                return await update.message.reply_text("The number of rounds must be an integer.")
+
+        res, err = new_game_guess_the_player(update.effective_chat.id, num_rounds, session)
     if not res:
         if err == "a game has started":
             return await update.message.reply_text("the is game in chat cant make a new on")
+        if err == "num of rounds less than 1":
+            return await update.message.reply_text("the number of rounds must be higher than or equal to 1")
         if err == "exception":
             return await update.message.reply_text(EXCEPTION_ERROR)
         else:
@@ -315,6 +325,14 @@ async def handle_test_guess_the_player_end_round_job(context: ContextTypes.DEFAU
             return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
         else:
             return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
+
+    print(err)
+    if err == "new round":
+        curr_player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=curr_player_id)
+        curr_player = curr_player.user
+        return await context.bot.send_message(chat_id=context.job.chat_id,
+                                       text=f"game started the curr player is {curr_player.mention_html()} send your the player and hints separated by comma ',' and the hints separated by a dash '-'",
+                                       parse_mode=ParseMode.HTML)
 
     if err == "game end":
         context.job_queue.run_once(handle_test_guess_the_player_end_game_job, when=0, chat_id=context.job.chat_id,
