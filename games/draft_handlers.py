@@ -6,7 +6,7 @@ from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.messagehandler import MessageHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
-from pprint import pprint
+
 from db.connection import get_session
 from games.draft_functions import FORMATIONS, add_pos_to_team_draft, add_vote, cancel_game_draft, check_draft, end_game_draft, get_vote_data, get_vote_results, join_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft
 from utils.helpers import remove_jobs
@@ -493,21 +493,9 @@ async def handle_test_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
             else:
                 return await context.bot.send_message(chat_id=chat_id, text=EXCEPTION_ERROR)
 
-    """
-    poll_data = {
-        "chat_id":chat_id,
-        "questions":players,
-        "votes_count":{player:0 for player in players},
-        "answers":0
-    }
-    """
-
-    #poll_data["message_id"] = message.message_id
     if not message.poll:
         return
 
-    #context.bot_data[f"poll_{message.poll.id}"] = poll_data
-    #context.bot_data[f"poll_{chat_id}"] = poll_data
     data = {"game_id":chat_id, "time":datetime.now()}
     context.job_queue.run_repeating(handle_test_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id,
                                     name=f"draft_reapting_votes_end_job_{context.job.chat_id}")
@@ -515,17 +503,13 @@ async def handle_test_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
                                name=f"draft_end_votes_job_{context.job.chat_id}")
 
 async def handle_test_draft_vote_recive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("vooooooooooote befor check")
     if not update.poll_answer or not context.job_queue:
         return
 
     answer = update.poll_answer
-    #poll_data = context.bot_data[f"poll_{answer.poll_id}"]
     poll_id = answer.poll_id
 
-    print("cheeeeeeeeeeeing options")
     with get_session() as session:
-        print("\n==========================\n", answer.option_ids[0], "\n==========================\n")
         res, err, chat_id = add_vote(poll_id, answer.option_ids[0], session)
 
     if not res:
@@ -539,7 +523,6 @@ async def handle_test_draft_vote_recive(update: Update, context: ContextTypes.DE
     if err == "end vote":
         remove_jobs(f"draft_reapting_votes_job_{chat_id}", context)
         remove_jobs(f"draft_end_votes_job_{chat_id}", context)
-        #await context.bot.stop_poll(chat_id=chat_id, message_id=poll_data["message_id"])
         data = {"game_id":chat_id, "time":datetime.now(), "poll_id":update.poll_answer.poll_id}
         context.job_queue.run_once(handle_test_draft_end_votes_job, when=0, data=data, chat_id=chat_id ,
                                    name=f"draft_end_votes_job_{chat_id}")
@@ -596,7 +579,6 @@ async def handle_test_draft_end_votes_command(update: Update, context: ContextTy
         winner = await context.bot.get_chat_member(chat_id=chat_id, user_id=id[0])
         max_vote_ids[i] = (winner.user, players_and_teams[i][1])
 
-    #del context.bot_data[f"poll_{poll_data['poll_id']}"]
     del context.bot_data[f"poll_{update.effective_chat.id}"]
     await context.bot.stop_poll(chat_id=chat_id, message_id=message_id)
     data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
@@ -635,17 +617,6 @@ async def handle_test_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
 
     if not players_and_teams or not formation:
         return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
-    """
-    players = []
-    for id, _ in players_and_teams:
-        player = await context.bot.get_chat_member(chat_id=chat_id, user_id=id)
-        players.append(player.user.full_name)
-
-    username_to_id = {players[i]:players_and_teams[i][0] for i in range(len(players))}
-    pprint(votes)
-    pprint(username_to_id)
-    votes = {username_to_id[username]:count for username, count in votes.items()}
-    """
 
     max_vote = float("-inf")
     max_vote_ids = []
