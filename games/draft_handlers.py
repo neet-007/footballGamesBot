@@ -15,6 +15,19 @@ NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_draft"
 EXCEPTION_ERROR = "internal error happend please try again later"
 STATE_ERROR = "game error happend\n or this is not the time for this command"
 
+JOBS_END_TIME_SECONDS = 180
+JOBS_REPEATING_INTERVAL = 20
+JOBS_REPEATING_FIRST = 10
+
+DRAFT_NEW_COMMAND = "draft_new"
+DRAFT_JOIN_COMMAND = "draft_join"
+DRAFT_START_COMMAND = "draft_start"
+DRAFT_SET_STATE_COMMAND = "draft_set_state"
+DRAFT_START_VOTE_COMMAND = "draft_start_vote"
+DRAFT_END_VOTE_COMMAND = "draft_end_vote"
+DRAFT_LEAVE_GAME_COMMAND = "draft_leave_game"
+DRAFT_CANCEL_GAME_COMMAND = "draft_cancel_game"
+
 def format_teams(teams:list[tuple[User, dict[str, str]]], formations:dict[str, str]):
     text = ""
     for player, team in teams:
@@ -23,7 +36,7 @@ def format_teams(teams:list[tuple[User, dict[str, str]]], formations:dict[str, s
         text += f"{player.mention_html()}\n{players_list}"
     return text
 
-async def handle_test_make_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or not update.effective_user or not update.message or not context.job_queue or update.effective_chat.type == "private":
         return
 
@@ -32,19 +45,23 @@ async def handle_test_make_game(update: Update, context: ContextTypes.DEFAULT_TY
     if not res:
         if err == "a game has started in this chat":
             return await update.message.reply_text("a game has started in this chat cant make a new one")
-        return await update.message.reply_text(EXCEPTION_ERROR)
+        if err == "exception":
+            return await update.message.reply_text(EXCEPTION_ERROR)
+        else:
+            return await update.message.reply_text(EXCEPTION_ERROR)
 
-    data = {"game_id":update.effective_chat.id, "time":datetime.now()}
-    context.job_queue.run_repeating(handle_test_draft_reapting_join_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id,
+    data = {"time":datetime.now()}
+    context.job_queue.run_repeating(handle_draft_reapting_join_job, interval=JOBS_REPEATING_INTERVAL,
+                                    first=JOBS_REPEATING_FIRST, data=data, chat_id=update.effective_chat.id,
                                     name=f"draft_reapting_join_job_{update.effective_chat.id}")
-    context.job_queue.run_once(handle_test_draft_start_game_job, when=60, data=data, chat_id=update.effective_chat.id,
+    context.job_queue.run_once(handle_draft_start_game_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=update.effective_chat.id,
                                name=f"draft_start_game_job_{update.effective_chat.id}")
-    await update.message.reply_text(text="a game has started /test_join or press the button", reply_markup=InlineKeyboardMarkup([
+    await update.message.reply_text(text=f"a draft game 📝 has started /{DRAFT_JOIN_COMMAND} or press the button", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(text="join game", callback_data="draft_join")]
         ]
     ))
 
-async def handle_test_draft_reapting_join_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_reapting_join_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
@@ -54,8 +71,12 @@ async def handle_test_draft_reapting_join_job(context: ContextTypes.DEFAULT_TYPE
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
                                                   text=NO_GAME_ERROR)
-        return await context.bot.send_message(chat_id=context.job.chat_id,
-                                              text=EXCEPTION_ERROR)
+        if err == "exception":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
+        else:
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
     
     if state != 0:
         return await context.bot.send_message(chat_id=context.job.chat_id,
@@ -63,10 +84,10 @@ async def handle_test_draft_reapting_join_job(context: ContextTypes.DEFAULT_TYPE
 
     await context.bot.send_message(
         chat_id=context.job.chat_id, 
-        text=f"Remaining time to join\n use /test_join to join the game\n or /test_start to start game\nnumber of players in game:{num_players}: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+        text=f"Remaining time to join:{round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds\n use /{DRAFT_JOIN_COMMAND} to join the game\nor /{DRAFT_START_COMMAND} to start game\nnumber of players in game:{num_players}"
     )
 
-async def handle_test_draft_start_game_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_start_game_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
@@ -79,24 +100,31 @@ async def handle_test_draft_start_game_job(context: ContextTypes.DEFAULT_TYPE):
         if err == "state error":
             return await context.bot.send_message(text=STATE_ERROR, chat_id=context.job.chat_id)
         if err == "no players associated with the game":
-            return await context.bot.send_message(text="there are no players in this game\n start a new one /new_draft", chat_id=context.job.chat_id)
-        if err == "number of players is less than 2 or not as expecte…":
-            return await context.bot.send_message(text="number of players less than two could not start\n start a new one /new_draft", chat_id=context.job.chat_id)
+            return await context.bot.send_message(text=f"there are no players in this game\nstart a new one /{DRAFT_NEW_COMMAND}",
+                                                  chat_id=context.job.chat_id)
+        if err == "number of players is less than 2 or not as expected":
+            return await context.bot.send_message(text=f"number of players less than two could not start\nstart a new one /{DRAFT_NEW_COMMAND}",
+                                                  chat_id=context.job.chat_id)
         if err == "exception":
             return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
         else:
             return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
 
-    data = {"game_id":context.job.chat_id, "time":datetime.now()}
-    context.job_queue.run_repeating(handle_test_draft_reapting_statement_job, interval=20, first=10, data=data, chat_id=context.job.chat_id,
+    data = {"time":datetime.now()}
+    context.job_queue.run_repeating(handle_draft_reapting_statement_job, interval=JOBS_REPEATING_INTERVAL,
+                                    first=JOBS_REPEATING_FIRST, data=data, chat_id=context.job.chat_id,
                                     name=f"draft_reapting_statement_job_{context.job.chat_id}")
-    context.job_queue.run_once(handle_test_draft_set_state_command_job, when=60, data=data, chat_id=context.job.chat_id,
+    context.job_queue.run_once(handle_draft_set_state_command_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=context.job.chat_id,
                                name=f"draft_set_state_command_job_{context.job.chat_id}")
     
-    await context.bot.send_message(text=f"the game has started decide the category, teams and formations\n then the admin should send as /test_set category, teams,teams should be separated by - and the number of teams must be {11 + num_players} formations in that order with commas\n supported formations are 442 443 4231 352 532 in this foramt",
+    await context.bot.send_message(text=f"""the draft game has started you have {JOBS_END_TIME_SECONDS} secnods to
+decide the category, teams and formations[433, 4231, 442, 532, 352]
+then send the command /{DRAFT_SET_STATE_COMMAND} [category], [teams], [formation]
+teams should be separated by -, like [team1-team2-team3] and the number of teams must be {11 + num_players}
+supported formations are 442, 443, 4231, 352, 532 in this foramt""",
                                    chat_id=context.job.chat_id)
 
-async def handle_test_join_game(update: Update, _: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_join(update: Update, _: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or not update.effective_user or not update.message or update.effective_chat.type == "private":
         return
 
@@ -117,7 +145,7 @@ async def handle_test_join_game(update: Update, _: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"player {update.effective_user.mention_html()} has joined the game", parse_mode=ParseMode.HTML)
 
-async def handle_test_draft_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.callback_query or not update.effective_chat or not update.effective_user or update.effective_chat.type == "private":
         return
 
@@ -146,7 +174,7 @@ async def handle_test_draft_join_callback(update: Update, context: ContextTypes.
     await context.bot.send_message(text=f"player {update.effective_user.mention_html()} has joined the game",
                                    chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
 
-async def handle_test_start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or not update.effective_user or not update.message or not context.job_queue or update.effective_chat.type == "private":
         return
 
@@ -160,23 +188,28 @@ async def handle_test_start_game(update: Update, context: ContextTypes.DEFAULT_T
         if err == "state error":
             return await update.message.reply_text(text=STATE_ERROR)
         if err == "no players associated with the game":
-            return await update.message.reply_text(text="there are no players in this game\n start a new one /new_draft")
-        if err == "number of players is less than 2 or not as expecte…":
-            return await update.message.reply_text(text="number of players less than two could not start\n start a new one /new_draft")
+            return await update.message.reply_text(text=f"there are no players in this game\nstart a new one /{DRAFT_NEW_COMMAND}")
+        if err == "number of players is less than 2 or not as expected":
+            return await update.message.reply_text(text=f"number of players less than two could not start\n start a new one /{DRAFT_NEW_COMMAND}")
         if err == "exception":
             return await update.message.reply_text(text=EXCEPTION_ERROR)
         else:
             return await update.message.reply_text(text=EXCEPTION_ERROR)
 
-    data = {"game_id":update.effective_chat.id, "time":datetime.now()}
-    context.job_queue.run_repeating(handle_test_draft_reapting_statement_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id,
+    data = {"time":datetime.now()}
+    context.job_queue.run_repeating(handle_draft_reapting_statement_job, interval=JOBS_REPEATING_INTERVAL,
+                                    first=JOBS_REPEATING_FIRST, data=data, chat_id=update.effective_chat.id,
                                     name=f"draft_reapting_statement_job_{update.effective_chat.id}")
-    context.job_queue.run_once(handle_test_draft_set_state_command_job, when=30, data=data, chat_id=update.effective_chat.id,
+    context.job_queue.run_once(handle_draft_set_state_command_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=update.effective_chat.id,
                                name=f"draft_set_state_command_job_{update.effective_chat.id}")
 
-    await update.message.reply_text(f"the game has started decide the category, teams and formations\n then the admin should send as /test_set category, teams,teams should be separated by - and the number of teams must be {11 + num_players} formations in that order with commas\n supported formations are 442 443 4231 352 532 in this foramt")
+    await update.message.reply_text(f"""the draft game has started you have {JOBS_END_TIME_SECONDS} secnods to
+decide the category, teams and formations[433, 4231, 442, 532, 352]
+then send the command /{DRAFT_SET_STATE_COMMAND} [category], [teams], [formation]
+teams should be separated by -, like [team1-team2-team3] and the number of teams must be {11 + num_players}
+supported formations are 442, 443, 4231, 352, 532 in this foramt""")
 
-async def handle_test_draft_reapting_statement_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_reapting_statement_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
@@ -186,18 +219,22 @@ async def handle_test_draft_reapting_statement_job(context: ContextTypes.DEFAULT
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
                                                   text=NO_GAME_ERROR)
-        return await context.bot.send_message(chat_id=context.job.chat_id,
-                                              text=EXCEPTION_ERROR)
+        if err == "exception":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
+        else:
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
 
     if state != 1:
         return await context.bot.send_message(chat_id=context.job.chat_id,
                                               text=STATE_ERROR)
     await context.bot.send_message(
         chat_id=context.job.chat_id, 
-        text=f"Remaining time to decide statements: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
+        text=f"Remaining time to decide statements:{round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
     )
  
-async def handle_test_draft_set_state_command_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_set_state_command_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
@@ -208,16 +245,23 @@ async def handle_test_draft_set_state_command_job(context: ContextTypes.DEFAULT_
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
                                                   text=NO_GAME_ERROR)
-        return await context.bot.send_message(chat_id=context.job.chat_id,
-                                              text=EXCEPTION_ERROR)
+        if err == "exception":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
+        else:
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
 
     if state != 1:
         return await context.bot.send_message(chat_id=context.job.chat_id,
                                               text=STATE_ERROR)
 
-    await context.bot.send_message(chat_id=context.job.chat_id, text=f"the admin should send the state as /test_set category, teams,teams should be separated by - and the number of teams must be {11 + num_players} formations in that order with commas\n supported formations are 442 443 4231 352 532 in this foramt")
+    await context.bot.send_message(chat_id=context.job.chat_id, text=f"""now send {DRAFT_SET_STATE_COMMAND} to
+decide the category, teams and formations[433, 4231, 442, 532, 352]
+teams should be separated by -, like [team1-team2-team3] and the number of teams must be {11 + num_players}
+supported formations are 442, 443, 4231, 352, 532 in this foramt""")
 
-async def handle_test_set_state(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_set_state(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_chat or not update.effective_user or update.effective_chat.type == "private":
         return
 
@@ -225,14 +269,14 @@ async def handle_test_set_state(update: Update, context: ContextTypes.DEFAULT_TY
     remove_jobs(f"draft_set_state_command_job_{update.effective_chat.id}", context)
     text = update.message.text.lower().replace("/test_set", "").split(",")
     if len(text) != 3:
-        return await update.message.reply_text("there is something missing")
+        return await update.message.reply_text("there is something missing\nyou must provied the category, teams, foramtation seperated by commas ','")
 
     with get_session() as session:
         res, err, other = set_game_states_draft(update.effective_chat.id, update.effective_user.id,
                                 text[0].strip(), text[1].split("-"), text[2].strip(), session)
     if not res:
-        if err == "game error":
-            return await update.message.reply_text(EXCEPTION_ERROR)
+        if err == "state error":
+            return await update.message.reply_text(STATE_ERROR)
         if err == "no game found":
             return await update.message.reply_text(NO_GAME_ERROR)
         if err == "player not in game":
@@ -259,7 +303,7 @@ async def handle_test_set_state(update: Update, context: ContextTypes.DEFAULT_TY
                                                 [InlineKeyboardButton(text="pick team", callback_data="draft_random_team")]
                                            ]))
 
-async def handle_test_draft_pick_team_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_pick_team_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.callback_query or not update.effective_chat or not update.effective_user:
         return
 
@@ -275,8 +319,8 @@ async def handle_test_draft_pick_team_callback(update: Update, context: ContextT
         if err == "player not in game":
             return await context.bot.send_message(text=PLAYER_NOT_IN_GAME_ERROR,
                                                   chat_id=update.effective_chat.id)
-        if err == "game error":
-            return await context.bot.send_message(text=EXCEPTION_ERROR,
+        if err == "state error":
+            return await context.bot.send_message(text=STATE_ERROR,
                                                   chat_id=update.effective_chat.id)
         if err == "curr_player_error":
             return await context.bot.send_message(text="player not curr player",
@@ -290,7 +334,7 @@ async def handle_test_draft_pick_team_callback(update: Update, context: ContextT
 
     await context.bot.send_message(text=f"the team is {team} now choose your {FORMATIONS[formation][curr_pos]}", chat_id=update.effective_chat.id)
 
-async def handle_test_draft_add_pos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_add_pos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
         return
 
@@ -304,8 +348,8 @@ async def handle_test_draft_add_pos(update: Update, context: ContextTypes.DEFAUL
             return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
         if status == "curr_player_error":
             return await update.message.reply_text("not current player")
-        if status == "game_error":
-            return await update.message.reply_text(EXCEPTION_ERROR)
+        if status == "state error":
+            return await update.message.reply_text(STATE_ERROR)
         if status == "picked_pos_error":
             return await update.message.reply_text("player has already picked this position")
         if status == "picked_team_error":
@@ -336,10 +380,11 @@ async def handle_test_draft_add_pos(update: Update, context: ContextTypes.DEFAUL
         if not other[0] or not other[1] or not other[2] or not other[3]:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
-        data = {"game_id":update.effective_chat.id, "time":datetime.now()}
-        context.job_queue.run_repeating(handle_test_draft_reapting_votes_job, interval=20, first=10, data=data, chat_id=update.effective_chat.id,
+        data = {"time":datetime.now()}
+        context.job_queue.run_repeating(handle_draft_reapting_votes_job, interval=JOBS_REPEATING_INTERVAL,
+                                        first=JOBS_REPEATING_FIRST, data=data, chat_id=update.effective_chat.id,
                                         name=f"draft_reapting_votes_job_{update.effective_chat.id}")
-        context.job_queue.run_once(handle_test_draft_set_votes_job, when=30, data=data, chat_id=update.effective_chat.id,
+        context.job_queue.run_once(handle_draft_set_votes_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=update.effective_chat.id,
                                    name=f"draft_set_votes_job_{update.effective_chat.id}")
         teams = []
         for player_id, team in other[3]:
@@ -348,12 +393,12 @@ async def handle_test_draft_add_pos(update: Update, context: ContextTypes.DEFAUL
 
         teams = format_teams(teams, FORMATIONS[other[1]])
         await context.bot.send_message(text=f"the teams\n{teams}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
-        await context.bot.send_message(text="the drafting has ended discuss the teams for 3 minutes then vote for the best", chat_id=update.effective_chat.id)
+        await context.bot.send_message(text=f"the drafting has ended discuss the teams for {JOBS_END_TIME_SECONDS} seconds then vote for the best", chat_id=update.effective_chat.id)
         return
     else:
         return await update.message.reply_text(status)
 
-async def handle_test_draft_reapting_votes_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_reapting_votes_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
@@ -363,8 +408,12 @@ async def handle_test_draft_reapting_votes_job(context: ContextTypes.DEFAULT_TYP
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
                                                   text=NO_GAME_ERROR)
-        return await context.bot.send_message(chat_id=context.job.chat_id,
-                                              text=EXCEPTION_ERROR)
+        if err == "exception":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
+        else:
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
 
     if not res or state != 3:
         return await context.bot.send_message(chat_id=context.job.chat_id,
@@ -375,7 +424,7 @@ async def handle_test_draft_reapting_votes_job(context: ContextTypes.DEFAULT_TYP
         text=f"Remaining time to decide: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
     )
 
-async def handle_test_draft_start_votes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_start_votes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue:
         return
     
@@ -407,8 +456,11 @@ async def handle_test_draft_start_votes_command(update: Update, context: Context
         players[1].append(player.user.full_name)
 
 
-    message = await context.bot.send_poll(question="you has the best team" ,options=players[1], chat_id=chat_id,
+    message = await context.bot.send_poll(question="who has the best team" ,options=players[1], chat_id=chat_id,
                                 is_anonymous=False, allows_multiple_answers=False)
+
+    if not message.poll:
+        return
 
     with get_session() as session:
         res, err = make_vote(chat_id, players[0], message.message_id, message.poll.id, session)
@@ -420,16 +472,14 @@ async def handle_test_draft_start_votes_command(update: Update, context: Context
             else:
                 return await context.bot.send_message(chat_id=chat_id, text=EXCEPTION_ERROR)
 
-    if not message.poll:
-        return
-
-    data = {"game_id":chat_id, "time":datetime.now()}
-    context.job_queue.run_repeating(handle_test_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id,
+    data = {"time":datetime.now()}
+    context.job_queue.run_repeating(handle_draft_reapting_votes_end_job, interval=JOBS_REPEATING_INTERVAL,
+                                    first=JOBS_REPEATING_FIRST, data=data, chat_id=chat_id,
                                     name=f"draft_reapting_votes_end_job_{update.effective_chat.id}")
-    context.job_queue.run_once(handle_test_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,
+    context.job_queue.run_once(handle_draft_end_votes_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=chat_id,
                                name=f"draft_end_votes_job_{update.effective_chat.id}")
 
-async def handle_test_draft_reapting_votes_end_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_reapting_votes_end_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
@@ -439,8 +489,12 @@ async def handle_test_draft_reapting_votes_end_job(context: ContextTypes.DEFAULT
         if err == "no game found":
             return await context.bot.send_message(chat_id=context.job.chat_id,
                                                   text=NO_GAME_ERROR)
-        return await context.bot.send_message(chat_id=context.job.chat_id,
-                                              text=EXCEPTION_ERROR)
+        if err == "exception":
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
+        else:
+            return await context.bot.send_message(chat_id=context.job.chat_id,
+                                                  text=EXCEPTION_ERROR)
 
     if not res or state != 3:
         return await context.bot.send_message(chat_id=context.job.chat_id,
@@ -451,14 +505,14 @@ async def handle_test_draft_reapting_votes_end_job(context: ContextTypes.DEFAULT
         text=f"Remaining time to vote: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
     )
 
-async def handle_test_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
     remove_jobs(f"draft_reapting_votes_job_{context.job.chat_id}", context)
     remove_jobs(f"draft_reapting_votes_end_job_{context.job.chat_id}", context)
     
-    chat_id = context.job.data["game_id"]
+    chat_id = context.job.chat_id
     with get_session() as session:
         res, err, state, players_ids = get_vote_data(chat_id, session)
     if not res:
@@ -486,6 +540,9 @@ async def handle_test_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
     message = await context.bot.send_poll(question="you has the best team" ,options=players[1], chat_id=chat_id,
                                 is_anonymous=False, allows_multiple_answers=False)
 
+    if not message.poll:
+        return
+
     with get_session() as session:
         res, err = make_vote(chat_id, players[0], message.message_id, message.poll.id, session)
         if not res:
@@ -496,16 +553,14 @@ async def handle_test_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
             else:
                 return await context.bot.send_message(chat_id=chat_id, text=EXCEPTION_ERROR)
 
-    if not message.poll:
-        return
-
-    data = {"game_id":chat_id, "time":datetime.now()}
-    context.job_queue.run_repeating(handle_test_draft_reapting_votes_end_job, interval=20, first=10, data=data, chat_id=chat_id,
+    data = {"time":datetime.now()}
+    context.job_queue.run_repeating(handle_draft_reapting_votes_end_job, interval=JOBS_REPEATING_INTERVAL,
+                                    first=JOBS_REPEATING_FIRST, data=data, chat_id=chat_id,
                                     name=f"draft_reapting_votes_end_job_{context.job.chat_id}")
-    context.job_queue.run_once(handle_test_draft_end_votes_job, when=30, data=data, chat_id=chat_id ,
+    context.job_queue.run_once(handle_draft_end_votes_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=chat_id,
                                name=f"draft_end_votes_job_{context.job.chat_id}")
 
-async def handle_test_draft_vote_recive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_vote_recive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.poll_answer or not context.job_queue:
         return
 
@@ -526,11 +581,11 @@ async def handle_test_draft_vote_recive(update: Update, context: ContextTypes.DE
     if err == "end vote":
         remove_jobs(f"draft_reapting_votes_job_{chat_id}", context)
         remove_jobs(f"draft_end_votes_job_{chat_id}", context)
-        data = {"game_id":chat_id, "time":datetime.now(), "poll_id":update.poll_answer.poll_id}
-        context.job_queue.run_once(handle_test_draft_end_votes_job, when=0, data=data, chat_id=chat_id ,
+        data = {"time":datetime.now(), "poll_id":update.poll_answer.poll_id}
+        context.job_queue.run_once(handle_draft_end_votes_job, when=0, data=data, chat_id=chat_id ,
                                    name=f"draft_end_votes_job_{chat_id}")
 
-async def handle_test_draft_end_votes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_end_votes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue:
         return
     
@@ -584,19 +639,17 @@ async def handle_test_draft_end_votes_command(update: Update, context: ContextTy
 
     del context.bot_data[f"poll_{update.effective_chat.id}"]
     await context.bot.stop_poll(chat_id=chat_id, message_id=message_id)
-    data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
-    context.job_queue.run_once(handle_test_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
+    data = {"time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
+    context.job_queue.run_once(handle_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
                                name=f"draft_end_game_job_{update.effective_chat.id}")
 
-async def handle_test_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
-    chat_id = context.job.data["game_id"]
+    chat_id = context.job.chat_id
     remove_jobs(f"draft_reapting_votes_job_{chat_id}", context)
     remove_jobs(f"draft_reapting_votes_end_job_{chat_id}", context)
-    
-    chat_id = context.job.chat_id
 
     with get_session() as session:
         res, err, message_id, votes = get_vote_results(chat_id, session)
@@ -640,10 +693,10 @@ async def handle_test_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.stop_poll(chat_id=chat_id, message_id=message_id)
     data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation], "is_won":is_won}
-    context.job_queue.run_once(handle_test_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
+    context.job_queue.run_once(handle_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
                                name=f"draft_end_game_job_{chat_id}")
 
-async def handle_test_draft_end_game_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_end_game_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
@@ -673,7 +726,7 @@ async def handle_test_draft_end_game_job(context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(text=f"the winners are {winners_text}\n the teams\n{teams}", chat_id=context.job.chat_id,
                                    parse_mode=ParseMode.HTML)
 
-async def handle_test_draft_cancel_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_cancel_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or not update.message:
         return
 
@@ -698,13 +751,13 @@ async def handle_test_draft_cancel_game(update: Update, context: ContextTypes.DE
 
     await update.message.reply_text("game has been canceled")
 
-make_game_test_handler = CommandHandler("test_make", handle_test_make_game)
-join_game_test_handler = CommandHandler("test_join", handle_test_join_game)
-start_game_test_handler = CommandHandler("test_start", handle_test_start_game)
-set_game_test_handler = CommandHandler("test_set", handle_test_set_state)
-cancel_game_test_handler = CommandHandler("test_cancel", handle_test_draft_cancel_game)
-end_vote_game_test_handler = CommandHandler("test_end_vote", handle_test_draft_end_votes_command)
-start_vote_game_test_handler = CommandHandler("test_start_vote", handle_test_draft_start_votes_command)
-vote_recive_poll_answer_test_handler = PollAnswerHandler(handle_test_draft_vote_recive)
-join_game_callback_test_handler = CallbackQueryHandler(callback=handle_test_draft_join_callback, pattern="^draft_join$")
-random_team_draft_game_callback_handler = CallbackQueryHandler(callback=handle_test_draft_pick_team_callback, pattern="^draft_random_team$")
+draft_new_handler = CommandHandler(DRAFT_NEW_COMMAND, handle_draft_new)
+draft_join_handler = CommandHandler(DRAFT_JOIN_COMMAND, handle_draft_join)
+draft_start_handler = CommandHandler(DRAFT_START_COMMAND, handle_draft_start)
+draft_set_state_handler = CommandHandler(DRAFT_SET_STATE_COMMAND, handle_draft_set_state)
+draft_cancel_game_handler = CommandHandler(DRAFT_CANCEL_GAME_COMMAND, handle_draft_cancel_game)
+draft_end_vote_handler = CommandHandler(DRAFT_END_VOTE_COMMAND, handle_draft_end_votes_command)
+draft_start_vote_handler = CommandHandler(DRAFT_START_VOTE_COMMAND, handle_draft_start_votes_command)
+draft_vote_recive_handler = PollAnswerHandler(handle_draft_vote_recive)
+draft_join_callback_handler = CallbackQueryHandler(callback=handle_draft_join_callback, pattern="^draft_join$")
+draft_pick_team_callback_handler = CallbackQueryHandler(callback=handle_draft_pick_team_callback, pattern="^draft_random_team$")

@@ -35,7 +35,7 @@ def check_draft(chat_id:int, session:Session):
             return True, "", game[0], game[1]
     except Exception as e:
         print(f"An error occurred: {e}")
-        return False, "", -1, -1
+        return False, "exception", -1, -1
 
 def get_vote_data(chat_id:int, session:Session):
     try:
@@ -149,7 +149,7 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
                 return False , "no game found", [-1]
 
             if game.state != 1 or teams == None:
-                return False, "game error", [game.num_players]
+                return False, "state error", [game.num_players]
 
             if not category:
                 return False, "no category error", [game.num_players]
@@ -202,7 +202,7 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
             game.picking_player_id = player.id
 
             game.state = 2
-            other = [game.num_players, game.category, game.formation_name, " ".join([team.name for team in game.teams]), player_id_]
+            other = [game.num_players, game.category, game.formation_name, "\n".join([team.name for team in game.teams]), player_id_]
             session.commit()
 
             return True, "", other
@@ -218,7 +218,7 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                 return False , "no game found", [None, None, None, None]
 
             if game.state != 2:
-                return False, "game error", [None, None, None, None]
+                return False, "state error", [None, None, None, None]
 
             player = session.query(DraftPlayer).filter(DraftPlayer.player_id == player_id,
                                                        DraftPlayer.draft_id == chat_id).first()
@@ -367,7 +367,7 @@ def rand_team_draft(chat_id:int, player_id:int, session:Session):
                 return False, "player not in game", "", "", ""
             
             if game.state != 2:
-                return False, "game error", "", "", ""
+                return False, "state error", "", "", ""
 
             if game.picking_player_id != player.id:
                 return False, "curr_player_error", "", "", ""

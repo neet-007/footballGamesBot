@@ -8,14 +8,14 @@ import traceback
 from json import dumps
 from html import escape
 
-from games.draft_handlers import handle_test_draft_add_pos
+from games.draft_handlers import DRAFT_CANCEL_GAME_COMMAND, DRAFT_END_VOTE_COMMAND, DRAFT_JOIN_COMMAND, DRAFT_NEW_COMMAND, DRAFT_SET_STATE_COMMAND, DRAFT_START_COMMAND, DRAFT_START_VOTE_COMMAND, handle_draft_add_pos
 from games.guess_the_player_handlers import handle_test_guess_the_player_answer_question_command, handle_test_guess_the_player_proccess_answer_command, handle_test_guess_the_player_start_round
 
 async def handle_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
-    await update.message.reply_text("""
+    await update.message.reply_text(f"""
 <strong>**Welcome to Football Games Bot** ⚽️</strong>
 
 <b>Essential commands:</b>
@@ -26,14 +26,14 @@ async def handle_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
 <strong>support the bot by giving it a start on github <a>https://github.com/neet-007/footballGamesBot</a> its free </strong>
 
 <b>draft commands 📝</b>
-- /draft_new start a draft game
-- /draft_join to join a draft game
-- /draft_start to start the draft game
-- /draft_set-state to set the draft game states category, formation and teams
-- /draft_start_vote to get the voting for teams
-- /draft_end_vote to end the current vote
-- /draft_leave_game to leave draft game
-- /draft_cancel to cancel the draft game
+- /{DRAFT_NEW_COMMAND} start a draft game
+- /{DRAFT_JOIN_COMMAND} to join a draft game
+- /{DRAFT_START_COMMAND} to start the draft game
+- /{DRAFT_SET_STATE_COMMAND} to set the draft game states category, formation and teams
+- /{DRAFT_START_VOTE_COMMAND} to get the voting for teams
+- /{DRAFT_END_VOTE_COMMAND} to end the current vote
+- /{DRAFT_END_VOTE_COMMAND} to leave draft game
+- /{DRAFT_CANCEL_GAME_COMMAND} to cancel the draft game
 
 <b>guess the player commands 🤔</b>
 - /guess_the_player_new to start a guess the player game
@@ -50,7 +50,7 @@ async def handle_help(update: Update, _: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
-    await update.message.reply_text("""
+    await update.message.reply_text(f"""
 <strong>**Welcome to Football Games Bot** ⚽️</strong>
 
 The games are inspired by SDS Podcast.
@@ -78,11 +78,11 @@ The games are inspired by SDS Podcast.
 
 <b>**How to Play Draft:**</b>
 
-- Start a new game with `/new_draft`.
+- Start a new game with `/{DRAFT_NEW_COMMAND}`.
 
 - After the game starts, you must decide the category, formation, and teams for the round.
 
-- After deciding, set the round using `/draft_set_state [category], [team1-team2-team3...], formation`.
+- After deciding, set the round using `/{DRAFT_SET_STATE_COMMAND} [category], [team1-team2-team3...], formation`.
 
 - The teams must be 11 + num players and with no duplicates.
 
@@ -112,7 +112,7 @@ async def message_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if message_text.startswith("answer is"):
         return await handle_test_guess_the_player_proccess_answer_command(update, context)
     if message_text.startswith("player"):
-        return await handle_test_draft_add_pos(update, context)
+        return await handle_draft_add_pos(update, context)
     else:
         await update.message.reply_text("if you are in guess the player game start answer with 'answer is'\nif you are in draft game start player added with 'player'")
 
