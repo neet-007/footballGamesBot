@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from db.models import Base
 
-TURSO_DATABASE_URL = getenv("TURSO_DATABASE_URL", "http://127.0.0.1:8080") 
+TURSO_DATABASE_URL = getenv("TURSO_DATABASE_URL", "sqlite+libsql://127.0.0.1:8080")
 print("db url: ", TURSO_DATABASE_URL)
 
-engine = create_engine("sqlite+libsql" + TURSO_DATABASE_URL, connect_args={'check_same_thread': False}, echo=False)
+engine = create_engine(TURSO_DATABASE_URL, connect_args={'check_same_thread': False}, echo=False)
 
 def new_db():
     Base.metadata.drop_all(engine)
