@@ -12,12 +12,24 @@ NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_guess_the_
 EXCEPTION_ERROR = "internal error happend please try again later"
 STATE_ERROR = "game error happend\n or this is not the time for this command"
 
-async def handle_test_guess_the_player_new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+JOBS_END_TIME_SECONDS = 180
+JOBS_REPEATING_INTERVAL = 20
+JOBS_REPEATING_FIRST = 10
+
+GUESS_THE_PLAYER_NEW = "guess_the_player_new"
+GUESS_THE_PLAYER_JOIN = "guess_the_player_join"
+GUESS_THE_PLAYER_START = "guess_the_player_start"
+GUESS_THE_PLAYER_ASK_Q = "guess_the_player_ask_q"
+GUESS_THE_PLAYER_GET_QUESTIONS = "guess_the_player_get_questions"
+GUESS_THE_PLAYER_LEAVE_GAME = "guess_the_player_leave_game"
+GUESS_THE_PLAYER_CANCEL_GAME = "guess_the_player_cancel_game"
+
+async def handle_guess_the_player_new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
         return
 
     with get_session() as session:
-        num_rounds = update.message.text.replace("/new_guess_the_player", "").strip() or None
+        num_rounds = update.message.text.replace(f"/{GUESS_THE_PLAYER_NEW}", "").strip() or None
 
         if num_rounds is not None:
             try:
@@ -36,16 +48,18 @@ async def handle_test_guess_the_player_new_game(update: Update, context: Context
         else:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
-    data = {"chat_id":update.effective_chat.id, "time":datetime.now()}
-    context.job_queue.run_repeating(handle_test_guess_the_player_reapting_join_job, data=data, interval=20, first=10,
+    data = {"time":datetime.now()}
+    context.job_queue.run_repeating(handle_guess_the_player_reapting_join_job, data=data, interval=JOBS_REPEATING_INTERVAL,
+                                    first=JOBS_REPEATING_FIRST,
                                     chat_id=update.effective_chat.id, name=f"guess_the_player_reapting_join_job_{update.effective_chat.id}")
-    context.job_queue.run_once(handle_test_guess_the_player_start_game_job, when=60, data=data, chat_id=update.effective_chat.id,
+    context.job_queue.run_once(handle_guess_the_player_start_game_job, when=JOBS_END_TIME_SECONDS,
+                               data=data, chat_id=update.effective_chat.id,
                                name=f"guess_the_player_start_game_job_{update.effective_chat.id}")
     
-    await update.message.reply_text("a game has started you can join with the join command /join_guess_the_player or click the button\n/start_game_guess_the_player to start game\ngame starts after 1 minute"
+    await update.message.reply_text(f"a guess the player game has started you can join with /{GUESS_THE_PLAYER_JOIN} or click the button\n/{GUESS_THE_PLAYER_START} to start game\ngame starts after 1 minute"
                                     , reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(text="join", callback_data="guess_the_player_join")]]))
 
-async def handle_test_guess_the_player_join_command(update:Update, _: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_join_command(update:Update, _: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat or not update.effective_user or update.effective_chat.type == "private":
         return
 
@@ -57,8 +71,8 @@ async def handle_test_guess_the_player_join_command(update:Update, _: ContextTyp
         if err == "player already in game":
             return await update.message.reply_text(f"player f{update.effective_user.mention_html()} has already joined the game",
                                                    parse_mode=ParseMode.HTML)
-        if err == "game has started":
-            return await update.message.reply_text("game has already started in this chat")
+        if err == "state error":
+            return await update.message.reply_text(STATE_ERROR)
         if err == "exception":
             return await update.message.reply_text(EXCEPTION_ERROR)
         else:
@@ -67,7 +81,7 @@ async def handle_test_guess_the_player_join_command(update:Update, _: ContextTyp
     await update.message.reply_text(f"player {update.effective_user.mention_html()} has joined the game",
                                     parse_mode=ParseMode.HTML)
 
-async def handle_test_guess_the_player_reapting_join_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_reapting_join_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
@@ -86,7 +100,7 @@ async def handle_test_guess_the_player_reapting_join_job(context: ContextTypes.D
         text=f"Remaining time to join: {round((context.job.data['time'] + timedelta(minutes=3) - datetime.now()).total_seconds())} seconds"
     )
 
-async def handle_test_guess_the_player_join_game_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_join_game_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.callback_query or not update.effective_chat or not update.effective_user or update.effective_chat.type == "private":
         return
 
@@ -103,9 +117,9 @@ async def handle_test_guess_the_player_join_game_callback(update: Update, contex
             return await context.bot.send_message(chat_id=update.effective_chat.id,
                                                   text=f"player f{update.effective_user.mention_html()} has already joined the game",
                                                    parse_mode=ParseMode.HTML)
-        if err == "game has started":
+        if err == "state error":
             return await context.bot.send_message(chat_id=update.effective_chat.id,
-                                                  text="a game has already started in this chat")
+                                                  text=STATE_ERROR)
         if err == "exception":
             return await context.bot.send_message(chat_id=update.effective_chat.id,
                                                   text=EXCEPTION_ERROR)
@@ -116,7 +130,7 @@ async def handle_test_guess_the_player_join_game_callback(update: Update, contex
     await context.bot.send_message(text=f"player {update.effective_user.mention_html()} has joined the game", chat_id=update.effective_chat.id,
                                    parse_mode=ParseMode.HTML)
 
-async def handle_test_guess_the_player_start_game_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_start_game_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
         return
 
@@ -132,7 +146,7 @@ async def handle_test_guess_the_player_start_game_job(context: ContextTypes.DEFA
             return await context.bot.send_message(text=PLAYER_NOT_IN_GAME_ERROR, chat_id=context.job.chat_id)
         if err == "state error":
             return await context.bot.send_message(text=STATE_ERROR, chat_id=context.job.chat_id)
-        if err == "number of players is less than 2 or not as expecte…":
+        if err == "number of players is less than 2 or not as expected":
             return await context.bot.send_message(text="not enough players", chat_id=context.job.chat_id)
         if err == "num players error":
             return await context.bot.send_message(text="not enough players", chat_id=context.job.chat_id)
@@ -144,10 +158,10 @@ async def handle_test_guess_the_player_start_game_job(context: ContextTypes.DEFA
     curr_player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=curr_player_id)
     curr_player = curr_player.user
 
-    await context.bot.send_message(text=f"game started the curr player is {curr_player.mention_html()} send your the player and hints separated by comma ',' and the hints separated by a dash '-'",
+    await context.bot.send_message(text=f"the game has started the current player is {curr_player.mention_html()}\nsend your player and hints separated by comma ',' and the hints separated by a dash '-' like this\n[player], [hint1-hint2-hint3]",
                                    chat_id=context.job.chat_id, parse_mode=ParseMode.HTML)
 
-async def handle_test_guess_the_player_start_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_start_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat or update.effective_chat.type == "private":
         return
 
@@ -164,7 +178,7 @@ async def handle_test_guess_the_player_start_game_command(update: Update, contex
             return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
         if err == "state error":
             return await update.message.reply_text(STATE_ERROR)
-        if err == "number of players is less than 2 or not as expecte…":
+        if err == "number of players is less than 2 or not as expected":
             return await update.message.reply_text("number of player less than 2")
         if err == "num players error":
             return await update.message.reply_text("number of player less than 2")
@@ -176,16 +190,16 @@ async def handle_test_guess_the_player_start_game_command(update: Update, contex
     curr_player = await context.bot.get_chat_member(chat_id=update.effective_chat.id, user_id=curr_player_id)
     curr_player = curr_player.user
 
-    await update.message.reply_text(f"game started the curr player is {curr_player.mention_html()} send your the player and hints separated by comma ',' and the hints separated by a dash '-'",
+    await update.message.reply_text(f"the game has started the current player is {curr_player.mention_html()}\nsend your player and hints separated by comma ',' and the hints separated by a dash '-' like this\n[player], [hint1-hint2-hint3]",
                                     parse_mode=ParseMode.HTML)
 
-async def handle_test_guess_the_player_start_round(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_start_round(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or update.effective_chat.type != "private":
         return
 
     text = update.message.text.lower().split(",")
     if len(text) != 2:
-        return await update.message.reply_text("must provide the player and hints separated by comma ','")
+        return await update.message.reply_text("must provide the player and hints separated by comma ','\n[player], [hint1-hint2-hint3]")
 
     with get_session() as session:
         res, err, curr_hints, chat_id = start_round_guess_the_player(update.effective_user.id, text[1].split("-"), text[0], session)
@@ -209,16 +223,16 @@ async def handle_test_guess_the_player_start_round(update: Update, context: Cont
         else:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
-    text = "\n".join([f"{index}. {hint}" for index, hint in enumerate(curr_hints, start=1)])
-    await context.bot.send_message(text=f"the curr hints are\n{text}\n every player has 3 questions and 2 tries\nuse /answer_player_guess_the_player followed by the player", chat_id=chat_id)
+    hints = "\n".join([f"{index}. {hint}" for index, hint in enumerate(curr_hints, start=1)])
+    await context.bot.send_message(text=f"the current hints are\n{hints}\n every player has 3 questions and 2 tries\nuse answer is followed by the player\nanswer is [player]", chat_id=chat_id)
 
-async def handle_test_guess_the_player_ask_question_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_ask_question_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_chat or not update.effective_user or not context.job_queue or not update.message.text or update.effective_chat.type == "private":
         return
 
     with get_session() as session:
         res, err, curr_player_id = ask_question_guess_the_player(update.effective_chat.id, update.effective_user.id,
-                                                 update.message.text.replace("/ask_q_guess_the_player", "").lower().strip(), session)
+                                                 update.message.text.replace(GUESS_THE_PLAYER_ASK_Q, "").lower().strip(), session)
     if not res:
         if err == "no game found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -240,16 +254,16 @@ async def handle_test_guess_the_player_ask_question_command(update: Update, cont
     curr_player = await update.effective_chat.get_member(user_id=curr_player_id)
     curr_player = curr_player.user
 
-    await update.message.reply_text(f"{curr_player.mention_html()} answer the question by replying to the qeustion", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"{curr_player.mention_html()} answer the question by replying to the qeustion message", parse_mode=ParseMode.HTML)
 
-async def handle_test_guess_the_player_answer_question_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_answer_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.reply_to_message or not update.message.reply_to_message.from_user or not update.message.text or not update.effective_chat or not update.effective_user or not context.job_queue or not update.message.reply_to_message.text:
         return
 
     with get_session() as session:
         res, err = answer_question_guess_the_player(update.effective_chat.id, update.effective_user.id,
                                                     update.message.reply_to_message.from_user.id,
-                                                    update.message.reply_to_message.text.replace("/ask_q_guess_the_player", ""),
+                                                    update.message.reply_to_message.text.replace(GUESS_THE_PLAYER_ASK_Q, ""),
                                                     update.message.text, session)
     if not res:
         if err == "game not found":
@@ -269,12 +283,12 @@ async def handle_test_guess_the_player_answer_question_command(update: Update, c
 
     await update.message.reply_text("a quesiton has been detucted")
 
-async def handle_test_guess_the_player_proccess_answer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_proccess_answer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_chat or not update.effective_user or not context.job_queue:
         return
 
     if update.effective_chat.type == "private":
-        return await handle_test_guess_the_player_start_round(update, context)
+        return await handle_guess_the_player_start_round(update, context)
 
     with get_session() as session:
         res, err = proccess_answer_guess_the_player(update.effective_chat.id, update.effective_user.id,
@@ -298,17 +312,17 @@ async def handle_test_guess_the_player_proccess_answer_command(update: Update, c
     if err == "false":
         return await update.message.reply_text("the answer is wrong")
     if err == "correct":
-        context.job_queue.run_once(handle_test_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
+        context.job_queue.run_once(handle_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
                                    name=f"guess_the_player_end_round_job_{update.effective_chat.id}")
         return await update.message.reply_text("your answer is correct")
     if err == "all players muted":
-        context.job_queue.run_once(handle_test_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
+        context.job_queue.run_once(handle_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
                                    name=f"guess_the_player_end_round_job_{update.effective_chat.id}")
         return await update.message.reply_text("you have lost")
     else:
         return await update.message.reply_text(EXCEPTION_ERROR)
 
-async def handle_test_guess_the_player_end_round_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_end_round_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not context.job_queue:
         return
 
@@ -326,28 +340,22 @@ async def handle_test_guess_the_player_end_round_job(context: ContextTypes.DEFAU
         else:
             return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
 
-    print(err)
-    if err == "new round":
+    if err == "new round" or err == "round end":
         curr_player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=curr_player_id)
         curr_player = curr_player.user
         return await context.bot.send_message(chat_id=context.job.chat_id,
-                                       text=f"game started the curr player is {curr_player.mention_html()} send your the player and hints separated by comma ',' and the hints separated by a dash '-'",
+                                       text=f"the game has started the current player is {curr_player.mention_html()}\nsend your player and hints separated by comma ',' and the hints separated by a dash '-' like this\n[player], [hint1-hint2-hint3]",
                                        parse_mode=ParseMode.HTML)
 
     if err == "game end":
-        context.job_queue.run_once(handle_test_guess_the_player_end_game_job, when=0, chat_id=context.job.chat_id,
+        await context.bot.send_message(text="the game has ended the results will come now", chat_id=context.job.chat_id)
+        context.job_queue.run_once(handle_guess_the_player_end_game_job, when=0, chat_id=context.job.chat_id,
                                    name=f"guess_the_player_end_game_job_{context.job.chat_id}")
-        return await context.bot.send_message(text="the game has ended the results will come now", chat_id=context.job.chat_id)
-    if err == "round end":
-        curr_player = await context.bot.get_chat_member(chat_id=context.job.chat_id, user_id=curr_player_id)
-        curr_player = curr_player.user
-
-        await context.bot.send_message(text=f"gane started the curr player is {curr_player.mention_html()} send your the player and hints separated by comma ',' and the hints separated by a dash '-'",
-                                       chat_id=context.job.chat_id, parse_mode=ParseMode.HTML)
+        return
     else:
         return await context.bot.send_message(text=err, chat_id=context.job.chat_id)
 
-async def handle_test_guess_the_player_end_game_job(context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_end_game_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not context.job_queue:
         return
 
@@ -375,7 +383,7 @@ async def handle_test_guess_the_player_end_game_job(context: ContextTypes.DEFAUL
 
     return await context.bot.send_message(text=f"scores:\n{text}\nwinners:\n{winners_text}", chat_id=context.job.chat_id, parse_mode=ParseMode.HTML)
 
-async def handle_test_guess_the_player_leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat or not update.effective_user or not context.job_queue:
         return
 
@@ -394,7 +402,7 @@ async def handle_test_guess_the_player_leave_game(update: Update, context: Conte
 
     await update.message.reply_text(f"player {update.effective_user.mention_html()} left the game", parse_mode=ParseMode.HTML)
 
-async def handle_test_guess_the_player_cancel_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_cancel_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat:
         return
 
@@ -414,7 +422,7 @@ async def handle_test_guess_the_player_cancel_game(update: Update, context: Cont
     remove_jobs(f"guess_the_player_end_game_job_{update.effective_chat.id}", context)
     await update.message.reply_text("game cancel")
 
-async def handle_test_guess_the_player_get_questions(update: Update, _: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_get_questions(update: Update, _: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat:
         return
 
@@ -442,11 +450,11 @@ async def handle_new_db(update: Update, _: ContextTypes.DEFAULT_TYPE):
 
 
 new_db_handler = CommandHandler("new_db", handle_new_db)
-guess_the_player_new_game_command_handler = CommandHandler("new_guess_the_player", handle_test_guess_the_player_new_game)
-guess_the_player_join_game_command_handler = CommandHandler("join_guess_the_player", handle_test_guess_the_player_join_command)
-guess_the_player_start_game_command_handler = CommandHandler("start_game_guess_the_player", handle_test_guess_the_player_start_game_command)
-guess_the_player_ask_question_command_handler = CommandHandler("ask_q_guess_the_player", handle_test_guess_the_player_ask_question_command)
-guess_the_player_leave_game_command_handler = CommandHandler("leave_game_guess_the_player", handle_test_guess_the_player_leave_game)
-guess_the_player_cancel_game_command_handler = CommandHandler("cancel_guess_the_player", handle_test_guess_the_player_cancel_game)
-guess_thE_player_get_questions_command_handler = CommandHandler("get_questions_guess_the_player", handle_test_guess_the_player_get_questions)
-guess_the_player_join_game_callback_handler = CallbackQueryHandler(handle_test_guess_the_player_join_game_callback, pattern="^guess_the_player_join$")
+guess_the_player_new_game_command_handler = CommandHandler(GUESS_THE_PLAYER_NEW, handle_guess_the_player_new_game)
+guess_the_player_join_game_command_handler = CommandHandler(GUESS_THE_PLAYER_JOIN, handle_guess_the_player_join_command)
+guess_the_player_start_game_command_handler = CommandHandler(GUESS_THE_PLAYER_START, handle_guess_the_player_start_game_command)
+guess_the_player_ask_question_command_handler = CommandHandler(GUESS_THE_PLAYER_ASK_Q, handle_guess_the_player_ask_question_command)
+guess_the_player_leave_game_command_handler = CommandHandler(GUESS_THE_PLAYER_LEAVE_GAME, handle_guess_the_player_leave_game)
+guess_the_player_cancel_game_command_handler = CommandHandler(GUESS_THE_PLAYER_CANCEL_GAME, handle_guess_the_player_cancel_game)
+guess_thE_player_get_questions_command_handler = CommandHandler(GUESS_THE_PLAYER_GET_QUESTIONS, handle_guess_the_player_get_questions)
+guess_the_player_join_game_callback_handler = CallbackQueryHandler(handle_guess_the_player_join_game_callback, pattern="^guess_the_player_join$")

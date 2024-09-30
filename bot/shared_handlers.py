@@ -9,7 +9,7 @@ from json import dumps
 from html import escape
 
 from games.draft_handlers import DRAFT_CANCEL_GAME_COMMAND, DRAFT_END_VOTE_COMMAND, DRAFT_JOIN_COMMAND, DRAFT_NEW_COMMAND, DRAFT_SET_STATE_COMMAND, DRAFT_START_COMMAND, DRAFT_START_VOTE_COMMAND, handle_draft_add_pos
-from games.guess_the_player_handlers import handle_test_guess_the_player_answer_question_command, handle_test_guess_the_player_proccess_answer_command, handle_test_guess_the_player_start_round
+from games.guess_the_player_handlers import GUESS_THE_PLAYER_ASK_Q, GUESS_THE_PLAYER_CANCEL_GAME, GUESS_THE_PLAYER_GET_QUESTIONS, GUESS_THE_PLAYER_JOIN, GUESS_THE_PLAYER_LEAVE_GAME, GUESS_THE_PLAYER_NEW, GUESS_THE_PLAYER_START, handle_guess_the_player_answer_question, handle_guess_the_player_proccess_answer_command, handle_guess_the_player_start_round
 
 async def handle_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
     if not update.message:
@@ -36,13 +36,13 @@ async def handle_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
 - /{DRAFT_CANCEL_GAME_COMMAND} to cancel the draft game
 
 <b>guess the player commands 🤔</b>
-- /guess_the_player_new to start a guess the player game
-- /guess_the_player_join to join a guess the player game
-- /guess_the_player_start to start a guess the player game
-- /guess_the_player_ask_q to ask a questino in guess the player game
-- /guess_the_player_get_questions to get the asked question in guess the player game
-- /guess_the_player_leave_game to leave guess the player game
-- /guess_the_player_cancel to cancel guess the player game
+- /{GUESS_THE_PLAYER_NEW} to start a guess the player game
+- /{GUESS_THE_PLAYER_JOIN} to join a guess the player game
+- /{GUESS_THE_PLAYER_START} to start a guess the player game
+- /{GUESS_THE_PLAYER_ASK_Q} to ask a questino in guess the player game
+- /{GUESS_THE_PLAYER_GET_QUESTIONS} to get the asked question in guess the player game
+- /{GUESS_THE_PLAYER_LEAVE_GAME} to leave guess the player game
+- /{GUESS_THE_PLAYER_CANCEL_GAME} to cancel guess the player game
 
 """, parse_mode=ParseMode.HTML)
 
@@ -62,7 +62,7 @@ The games are inspired by SDS Podcast.
 
 <b>**How to Play Guess the Player:**</b>
 
-- Start a new game with `/new_guess_the_player [num rounds]`. The game has 2 rounds by default. You can have any number of rounds by adding it after the start command.
+- Start a new game with `/{GUESS_THE_PLAYER_NEW}[num rounds]`. The game has 2 rounds by default. You can have any number of rounds by adding it after the start command.
 
 - After the round starts, the current player should send the hints and answer to the bot like this: `answer, hint1-hint2-hint3`.
 
@@ -72,7 +72,7 @@ The games are inspired by SDS Podcast.
 
 - To answer the question, prefix the answer with `the answer is [answer]`.
 
-- To ask a question, use the command `/guess_the_player_ask_q`. The current player must reply to the question message with their answer.
+- To ask a question, use the command `/{GUESS_THE_PLAYER_ASK_Q}`. The current player must reply to the question message with their answer.
 
 - There can be only one asked question at a time.
 
@@ -104,13 +104,13 @@ async def message_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     if update.effective_chat.type == "private":
-        return await handle_test_guess_the_player_start_round(update, context)
+        return await handle_guess_the_player_start_round(update, context)
 
     message_text = update.message.text.strip().lower()
     if update.message.reply_to_message:
-        return await handle_test_guess_the_player_answer_question_command(update, context)
+        return await handle_guess_the_player_answer_question(update, context)
     if message_text.startswith("answer is"):
-        return await handle_test_guess_the_player_proccess_answer_command(update, context)
+        return await handle_guess_the_player_proccess_answer_command(update, context)
     if message_text.startswith("player"):
         return await handle_draft_add_pos(update, context)
     else:

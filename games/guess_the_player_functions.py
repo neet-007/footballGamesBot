@@ -51,7 +51,7 @@ def join_game_guess_the_player(chat_id:int, player_id:int, session:Session):
                 return False, "no game"
 
             if guess_the_player.state != 0:
-                return False, "game has started"
+                return False, "state error"
 
             player_db = session.query(GuessThePlayerPlayer).filter(GuessThePlayerPlayer.player_id == player_id,
                                                                    GuessThePlayerPlayer.guess_the_player_id == chat_id).first()
@@ -422,7 +422,6 @@ def end_round_guess_the_player(chat_id:int, session:Session):
             guess_the_player.state = 3
 
             if not next_player:
-                print(guess_the_player.curr_round, guess_the_player.num_rounds)
                 if guess_the_player.curr_round < guess_the_player.num_rounds:
                     (
                         session.query(GuessThePlayerPlayer).
