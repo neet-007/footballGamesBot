@@ -203,7 +203,6 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
 
             game.state = 2
             other = [game.num_players, game.category, game.formation_name, "\n".join([team.name for team in game.teams]), player_id_]
-            session.commit()
 
             return True, "", other
     except Exception as e:
@@ -382,7 +381,6 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                     return False, "", [None, None, None, None]
 
                 other = [curr_player.player_id, game.formation_name, game.curr_pos]
-                session.commit()
                 return True, "new_pos", other
 
             game.current_player_id = non_picked_players[0].id
@@ -392,7 +390,6 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                 return False, "", [None, None, None, None]
 
             other = [curr_player.player_id, game.formation_name, game.curr_pos]
-            session.commit()
             return True, "same_pos", other
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -460,7 +457,6 @@ def transfers(chat_id:int, player_id:int, position:str, session:Session):
             team_name = team_instance.name
             formation = game.formation_name
             curr_pos = game.curr_pos
-            session.commit()
 
             return True, "", team_name, formation, curr_pos, -1
     except Exception as e:
@@ -503,7 +499,6 @@ def rand_team_draft(chat_id:int, player_id:int, session:Session):
             team_name = team_instance.name
             formation = game.formation_name
             curr_pos = game.curr_pos
-            session.commit()
 
             return True, "", team_name, formation, curr_pos
     except Exception as e:
