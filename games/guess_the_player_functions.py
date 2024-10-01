@@ -178,7 +178,7 @@ def start_round_guess_the_player(player_id:int, curr_hints:list[str], curr_answe
             if not guess_the_player:
                 return False, "no game found", [], -1
 
-            if guess_the_player.state != 1 and guess_the_player.state != 3:
+            if guess_the_player.state != 1:
                 return False, "state error", [], -1
             if len(curr_hints) != 3:
                 return False, "num hints error", [], -1
@@ -419,7 +419,7 @@ def end_round_guess_the_player(chat_id:int, session:Session):
                     .first()
             )
 
-            guess_the_player.state = 3
+            guess_the_player.state = 1
 
             if not next_player:
                 if guess_the_player.curr_round < guess_the_player.num_rounds:

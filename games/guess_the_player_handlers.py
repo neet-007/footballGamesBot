@@ -11,6 +11,7 @@ PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
 NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_guess_the_player"
 EXCEPTION_ERROR = "internal error happend please try again later"
 STATE_ERROR = "game error happend\n or this is not the time for this command"
+CURR_PLAYER_ERROR = "❌  your are not the current player"
 
 JOBS_END_TIME_SECONDS = 180
 JOBS_REPEATING_INTERVAL = 20
@@ -213,7 +214,7 @@ async def handle_guess_the_player_start_round(update: Update, context: ContextTy
         if err == "player not found or not in game":
             return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
         if err == "curr player error":
-            return await update.message.reply_text("player is no the current player")
+            return await update.message.reply_text(CURR_PLAYER_ERROR)
         if err == "empty inputs":
             return await update.message.reply_text("must provide the player and hints separated by comma ','")
         if err == "num hints error":
@@ -233,6 +234,7 @@ async def handle_guess_the_player_ask_question_command(update: Update, context: 
     with get_session() as session:
         res, err, curr_player_id = ask_question_guess_the_player(update.effective_chat.id, update.effective_user.id,
                                                  update.message.text.replace(GUESS_THE_PLAYER_ASK_Q, "").lower().strip(), session)
+        print(err)
     if not res:
         if err == "no game found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -241,7 +243,7 @@ async def handle_guess_the_player_ask_question_command(update: Update, context: 
         if err == "player not in game":
             return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
         if err == "curr player error":
-            return await update.message.reply_text("the player is not the current player")
+            return await update.message.reply_text(CURR_PLAYER_ERROR)
         if err == "no questions":
             return await update.message.reply_text("you have used all your questions")
         if err == "there is askin player error":
@@ -273,7 +275,7 @@ async def handle_guess_the_player_answer_question(update: Update, context: Conte
         if err == "players not in game":
             return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
         if err == "curr player error":
-            return await update.message.reply_text("the player is not the current player")
+            return await update.message.reply_text(CURR_PLAYER_ERROR)
         if err == "not the question":
             return await update.message.reply_text("this is not the message with querstion")
         if err == "exception":
@@ -301,7 +303,7 @@ async def handle_guess_the_player_proccess_answer_command(update: Update, contex
         if err == "player not in game":
             return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
         if err == "curr player error":
-            return await update.message.reply_text("the player is not the current player")
+            return await update.message.reply_text(CURR_PLAYER_ERROR)
         if err == "muted player":
             return await update.message.reply_text("you are muted")
         if err == "exception":
@@ -310,7 +312,7 @@ async def handle_guess_the_player_proccess_answer_command(update: Update, contex
             return await update.message.reply_text(EXCEPTION_ERROR)
     
     if err == "false":
-        return await update.message.reply_text("the answer is wrong")
+        return await update.message.reply_text("❌  your answer is wrong")
     if err == "correct":
         context.job_queue.run_once(handle_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
                                    name=f"guess_the_player_end_round_job_{update.effective_chat.id}")

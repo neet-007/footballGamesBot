@@ -14,6 +14,7 @@ PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
 NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_draft"
 EXCEPTION_ERROR = "internal error happend please try again later"
 STATE_ERROR = "game error happend\n or this is not the time for this command"
+CURR_PLAYER_ERROR = "❌ your are not the current player"
 
 JOBS_END_TIME_SECONDS = 180
 JOBS_REPEATING_INTERVAL = 20
@@ -323,7 +324,7 @@ async def handle_draft_pick_team_callback(update: Update, context: ContextTypes.
             return await context.bot.send_message(text=STATE_ERROR,
                                                   chat_id=update.effective_chat.id)
         if err == "curr_player_error":
-            return await context.bot.send_message(text="player not curr player",
+            return await context.bot.send_message(text=CURR_PLAYER_ERROR,
                                                   chat_id=update.effective_chat.id)
         if err == "expection":
             return await context.bot.send_message(text=EXCEPTION_ERROR,
@@ -361,7 +362,7 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
             return await context.bot.send_message(text=STATE_ERROR,
                                                   chat_id=update.effective_chat.id)
         if err == "curr_player_error":
-            return await context.bot.send_message(text="player not curr player",
+            return await context.bot.send_message(text=CURR_PLAYER_ERROR,
                                                   chat_id=update.effective_chat.id)
         if err == "expection":
             return await context.bot.send_message(text=EXCEPTION_ERROR,
@@ -426,14 +427,14 @@ async def handle_draft_add_pos(update: Update, context: ContextTypes.DEFAULT_TYP
         if status == "player not in game":
             return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
         if status == "curr_player_error":
-            return await update.message.reply_text("not current player")
+            return await update.message.reply_text(CURR_PLAYER_ERROR)
         if status == "state error":
             return await update.message.reply_text(STATE_ERROR)
         if status == "picked_pos_error":
             return await update.message.reply_text("player has already picked this position")
         if status == "picked_team_error":
             return await update.message.reply_text("this team has already passed")
-        if status == "taken_player_error":
+        if status == "taken player error":
             return await update.message.reply_text("this player is taken")
         if status == "expection":
             return await update.message.reply_text(EXCEPTION_ERROR)
