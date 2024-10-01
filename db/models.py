@@ -123,6 +123,7 @@ class DraftPlayer(Base):
 
     picked: Mapped[bool] = mapped_column(Boolean, default=False)
     picking: Mapped[bool] = mapped_column(Boolean, default=False)
+    transferd: Mapped[bool] = mapped_column(Boolean, default=False)
     time_join: Mapped[datetime] = mapped_column(TIMESTAMP, default=func.now())
 
     team = relationship("DraftPlayerTeam", uselist=False, backref="player", cascade="all, delete-orphan")

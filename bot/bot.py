@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from os import getenv
 from sys import exit
 from bot.shared_handlers import error_handler, handle_help, handle_start, message_dispatcher
-from games.draft_handlers import draft_new_handler, draft_join_handler, draft_start_handler, draft_set_state_handler, draft_start_vote_handler, draft_end_vote_handler, draft_cancel_game_handler, draft_vote_recive_handler, draft_join_callback_handler, draft_pick_team_callback_handler
+from games.draft_handlers import draft_new_handler, draft_join_handler, draft_start_handler, draft_set_state_handler, draft_start_vote_handler, draft_end_vote_handler, draft_cancel_game_handler, draft_vote_recive_handler, draft_join_callback_handler, draft_pick_team_callback_handler, draft_transfer_callback_handler
 from games.guess_the_player_handlers import guess_the_player_start_game_command_handler, guess_the_player_join_game_command_handler, guess_the_player_new_game_command_handler,guess_the_player_ask_question_command_handler, guess_the_player_cancel_game_command_handler, guess_the_player_join_game_callback_handler, guess_the_player_leave_game_command_handler, guess_thE_player_get_questions_command_handler, new_db_handler
 
 load_dotenv()
@@ -57,6 +57,7 @@ ptb.add_handler(draft_cancel_game_handler)
 ptb.add_handler(draft_start_vote_handler)
 ptb.add_handler(draft_end_vote_handler)
 ptb.add_handler(draft_join_callback_handler)
+ptb.add_handler(draft_transfer_callback_handler)
 ptb.add_handler(draft_pick_team_callback_handler)
 ptb.add_handler(draft_vote_recive_handler)
 
