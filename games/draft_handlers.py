@@ -335,7 +335,6 @@ async def handle_draft_pick_team_callback(update: Update, context: ContextTypes.
     await context.bot.send_message(text=f"the team is {team} now choose your {FORMATIONS[formation][curr_pos]}", chat_id=update.effective_chat.id)
 
 async def handle_draft_transfer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("heeeeeeeeeere")
     if not update.callback_query or not update.effective_chat or not update.effective_user or not context.job_queue:
         return
 
@@ -718,14 +717,6 @@ async def handle_draft_end_votes_command(update: Update, context: ContextTypes.D
     if not players_and_teams or not formation:
         return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
     
-    players = []
-    for id, _ in players_and_teams:
-        player = await context.bot.get_chat_member(chat_id=chat_id, user_id=id)
-        players.append(player.user.full_name)
-
-    username_to_id = {players[i]:players_and_teams[i][0] for i in range(len(players))}
-    votes = {username_to_id[username]:count for username, count in votes.items()}
-
     max_vote = float("-inf")
     max_vote_ids = []
     for id, vote_count in votes.items():
@@ -739,11 +730,12 @@ async def handle_draft_end_votes_command(update: Update, context: ContextTypes.D
         winner = await context.bot.get_chat_member(chat_id=chat_id, user_id=id[0])
         max_vote_ids[i] = (winner.user, players_and_teams[i][1])
 
-    del context.bot_data[f"poll_{update.effective_chat.id}"]
+    is_won = True
+    if max_vote == 0 or max_vote == float("-inf"):
+        is_won = False
+
     await context.bot.stop_poll(chat_id=chat_id, message_id=message_id)
-    data = {"time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation]}
-    context.job_queue.run_once(handle_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
-                               name=f"draft_end_game_job_{update.effective_chat.id}")
+    await draft_end_game(chat_id, max_vote_ids, FORMATIONS[formation], is_won, context)
 
 async def handle_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
@@ -794,30 +786,21 @@ async def handle_draft_end_votes_job(context: ContextTypes.DEFAULT_TYPE):
         is_won = False
 
     await context.bot.stop_poll(chat_id=chat_id, message_id=message_id)
-    data = {"game_id":chat_id, "time":datetime.now(), "winners":max_vote_ids, "formation":FORMATIONS[formation], "is_won":is_won}
-    context.job_queue.run_once(handle_draft_end_game_job, when=0, data=data, chat_id=chat_id ,
-                               name=f"draft_end_game_job_{chat_id}")
+    await draft_end_game(chat_id, max_vote_ids, FORMATIONS[formation], is_won, context)
 
-async def handle_draft_end_game_job(context: ContextTypes.DEFAULT_TYPE):
-    if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
-        return
+async def draft_end_game(chat_id, winners, formation, is_won, context: ContextTypes.DEFAULT_TYPE):
+    remove_jobs(f"draft_reapting_votes_job_{chat_id}", context)
+    remove_jobs(f"draft_reapting_votes_end_job_{chat_id}", context)
 
-    remove_jobs(f"draft_reapting_votes_job_{context.job.chat_id}", context)
-    remove_jobs(f"draft_reapting_votes_end_job_{context.job.chat_id}", context)
-
-    winners = context.job.data["winners"]
-    formation = context.job.data["formation"]
-    is_won = context.job.data["is_won"]
-    
     if not isinstance(winners, list):
-        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
+        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
     if not isinstance(formation, dict):
-        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
+        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
     if not isinstance(is_won, bool):
-        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=context.job.chat_id)
+        return await context.bot.send_message(text=EXCEPTION_ERROR, chat_id=chat_id)
 
     if not is_won:
-        return await context.bot.send_message(text=f"the are no winners,\nno one voted", chat_id=context.job.chat_id)
+        return await context.bot.send_message(text=f"the are no winners,\nno one voted", chat_id=chat_id)
 
     winners_text = ""
     teams = []
@@ -825,7 +808,7 @@ async def handle_draft_end_game_job(context: ContextTypes.DEFAULT_TYPE):
         winners_text += f"{winner[0].mention_html()}\n"
         teams.append((winner[0], winner[1]))
     teams = format_teams(teams, formation)
-    await context.bot.send_message(text=f"the winners are {winners_text}\n the teams\n{teams}", chat_id=context.job.chat_id,
+    await context.bot.send_message(text=f"the winners are {winners_text}\n the teams\n{teams}", chat_id=chat_id,
                                    parse_mode=ParseMode.HTML)
 
 async def handle_draft_cancel_game(update: Update, context: ContextTypes.DEFAULT_TYPE):

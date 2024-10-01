@@ -401,7 +401,6 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
 def transfers(chat_id:int, player_id:int, position:str, session:Session):
     try:
         with session.begin():
-            print(position)
             if position not in ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10", "p11", "skip"]:
                 return False, "invalid posistion", "", "" ,"", -1
 
@@ -432,7 +431,6 @@ def transfers(chat_id:int, player_id:int, position:str, session:Session):
                 return False, "game error", "", "", "", -1
 
             if position == "skip":
-                print("skipppppppppppp")
                 player.transferd = True
                 session.flush()
     
@@ -443,14 +441,12 @@ def transfers(chat_id:int, player_id:int, position:str, session:Session):
                                .first()
                                ) 
                 if not next_player:
-                    print("enddddddddddddddddddddddd")
                     game.state = 4
                     return True, "end_game", "", "" , "", -1
 
                 game.current_player_id = next_player[0]
                 game.picking_player_id = next_player[0]
 
-                print("skippppppppppppppppppppped")
                 return True, "skipped", "", game.formation_name, "", next_player[1]
 
             rand_team = non_picked_teams[randint(0, len(non_picked_teams) - 1)]
