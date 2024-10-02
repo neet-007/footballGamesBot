@@ -1,6 +1,6 @@
 import logging
 from random import randint
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from db.models import Draft, DraftPlayer, DraftPlayerTeam, DraftVote, DraftVotePlayer, Game, Team, draft_team_association
 
@@ -620,6 +620,66 @@ def end_game_draft(chat_id:int, session:Session):
     except Exception as e:
         print(f"An error occurred: {e}")
         return False, "exception", None, None
+
+def leave_game_draft(chat_id:int, player_id:int, session:Session):
+    try:
+        with session.begin():
+            draft = session.query(Draft).filter(Draft.chat_id == chat_id).first()
+            player = session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id, DraftPlayer.player_id == player_id).first()
+            if not draft:
+                return False, "no game found"
+        
+            if not player:
+                return False, "player not in game"
+
+            if draft.num_players <= 2:
+                pass
+
+            if draft.state < 2:
+                session.delete(player)
+                draft.num_players -= 1
+
+                return True, "", 0, 0, draft.num_players
+
+            if draft.state < 4:
+                next_curr_player = None
+                next_picking_player = None
+
+                if draft.current_player_id == player.id:
+                    next_curr_player = (
+                        session.query(DraftPlayer)
+                        .filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picked == False)
+                        .order_by(DraftPlayer.time_join.asc())
+                        .first()
+                    )
+
+                    if not next_curr_player:
+                        session.delete(player)
+                        return True, "no next current player", 0, 0
+
+                if draft.picking_player_id == player.id:
+                    next_picking_player = (
+                        session.query(DraftPlayer)
+                        .filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picking == False)
+                        .order_by(DraftPlayer.time_join.asc())
+                        .first()
+                    )
+
+                    if not next_picking_player:
+                        session.delete(player)
+                        return True, "no next picking player", 0, 0
+
+            if draft.state == 4:
+                (
+                    session.query(DraftVotePlayer)
+                    .filter(DraftVotePlayer.draft_vote == chat_id, DraftVotePlayer.player_id == player_id)
+                    .delete()
+                )
+
+            return True, ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "exception"
 
 def cancel_game_draft(chat_id:int, session:Session):
     try:

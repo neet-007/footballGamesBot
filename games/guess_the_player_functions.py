@@ -137,7 +137,7 @@ def start_game_guess_the_player(chat_id:int, session:Session):
 
             session.execute(
                 insert(guess_the_player_guess_the_player_player_association).values(
-                    guess_the_player_id=guess_the_player.chat_id,
+                    guess_the_player_id=chat_id,
                     guess_the_player_player_id=guess_the_player.current_player_id,
                     guess_the_player_player_player_id=curr_player[0],
                     time_created=func.now()
@@ -558,29 +558,50 @@ def leave_game_guess_the_player(chat_id:int, player_id:int, session:Session):
             if not player:
                 return False, "player not in game", -1
 
-            if guess_the_player.num_players <= 2:
-                (
-                    session.query(Game)
-                    .filter(Game.chat_id == chat_id)
-                    .delete()
-                )
-                session.delete(guess_the_player)
-            if guess_the_player.current_player_id == player.id:
+            player_intance_id = player.id
+            (
+                session.query(GuessThePlayerPlayer)
+                .filter(GuessThePlayerPlayer.id == player.id)
+                .delete()
+            )
+            num_players = guess_the_player.num_players - 1
+            guess_the_player.num_players = num_players
+    
+            if guess_the_player.state == 0:
+                return True, "", -1
+
+            if num_players < 2:
+                return True, "end game", -1
+
+            if guess_the_player.asking_player_id == player_intance_id:
+                guess_the_player.asking_player_id = None
+
+            elif guess_the_player.current_player_id == player.id:
                 next_player = (
                         session.query(GuessThePlayerPlayer.id, GuessThePlayerPlayer.player_id)
                         .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id,
-                                GuessThePlayerPlayer.picked == False)
+                                GuessThePlayerPlayer.picked == False,
+                                GuessThePlayerPlayer.id != player_intance_id)
                         .order_by(GuessThePlayerPlayer.time_join.asc())  
                         .first()
                 )
                 if not next_player:
-                    return False, "game end", -1
+                    return True, "end round", -1
 
-                session.delete(player)
                 guess_the_player.current_player_id = next_player[0]
-                guess_the_player.state = 2
+                guess_the_player.state = 3
                 guess_the_player.curr_hints = ["", "", ""]
                 guess_the_player.curr_answer = ""
+                  
+                session.execute(
+                    insert(guess_the_player_guess_the_player_player_association).values(
+                        guess_the_player_id=chat_id,
+                        guess_the_player_player_id=next_player[0],
+                        guess_the_player_player_player_id=next_player[1],
+                        time_created=func.now()
+                    )
+                )
+
                 (
                     session.query(GuessThePlayerPlayer).
                     filter(GuessThePlayerPlayer.guess_the_player_id == chat_id)
@@ -598,13 +619,8 @@ def leave_game_guess_the_player(chat_id:int, player_id:int, session:Session):
                     .delete()
                 )
 
-                guess_the_player.state = 3
-                session.delete(player)
                 return True, "new curr player", next_player[1]
-            if guess_the_player.asking_player_id == player.id:
-                guess_the_player.asking_player_id = None
 
-            session.delete(player)
             return True, "", -1
     except Exception as e:
         print(f"An error occurred: {e}")

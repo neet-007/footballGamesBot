@@ -7,12 +7,6 @@ from db.connection import get_session, new_db
 from games.guess_the_player_functions import answer_question_guess_the_player, ask_question_guess_the_player, cancel_game_guess_the_player, check_guess_the_player, end_game_guess_the_player, end_round_guess_the_player, get_asked_questions_guess_the_player, join_game_guess_the_player, leave_game_guess_the_player, new_game_guess_the_player, proccess_answer_guess_the_player, start_game_guess_the_player, start_round_guess_the_player
 from utils.helpers import remove_jobs
 
-PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
-NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_guess_the_player"
-EXCEPTION_ERROR = "internal error happend please try again later"
-STATE_ERROR = "game error happend\n or this is not the time for this command"
-CURR_PLAYER_ERROR = "❌  your are not the current player"
-
 JOBS_END_TIME_SECONDS = 180
 JOBS_REPEATING_INTERVAL = 20
 JOBS_REPEATING_FIRST = 10
@@ -27,6 +21,12 @@ GUESS_THE_PLAYER_ANSWER = "guess_the_player_answer"
 GUESS_THE_PLAYER_GET_QUESTIONS = "guess_the_player_get_questions"
 GUESS_THE_PLAYER_LEAVE_GAME = "guess_the_player_leave_game"
 GUESS_THE_PLAYER_CANCEL_GAME = "guess_the_player_cancel_game"
+
+PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
+NO_GAME_ERROR = f"there is no game in this chat \nstart one using /{GUESS_THE_PLAYER_NEW}"
+EXCEPTION_ERROR = "internal error happend please try again later"
+STATE_ERROR = "game error happend\n or this is not the time for this command"
+CURR_PLAYER_ERROR = "❌  your are not the current player"
 
 async def handle_guess_the_player_new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
@@ -366,6 +366,7 @@ async def handle_guess_the_player_end_game_job(context: ContextTypes.DEFAULT_TYP
 
     with get_session() as session:
         res, err, scores, winners = end_game_guess_the_player(context.job.chat_id, session)
+    print(res, err)
     if not res:
         if err == "game not found":
             return await context.bot.send_message(text=NO_GAME_ERROR, chat_id=context.job.chat_id)
@@ -392,9 +393,8 @@ async def handle_guess_the_player_leave_game(update: Update, context: ContextTyp
     if not update.message or not update.effective_chat or not update.effective_user or not context.job_queue:
         return
 
-    # mybe handle when the palyer is the current
     with get_session() as session:
-        res, err, _ = leave_game_guess_the_player(update.effective_chat.id, update.effective_user.id, session)
+        res, err, curr_player_id = leave_game_guess_the_player(update.effective_chat.id, update.effective_user.id, session)
     if not res:
         if err == "game not found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -405,7 +405,25 @@ async def handle_guess_the_player_leave_game(update: Update, context: ContextTyp
         else:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
+
     await update.message.reply_text(f"player {update.effective_user.mention_html()} left the game", parse_mode=ParseMode.HTML)
+
+    if err == "end game":
+        await update.message.reply_text("number of players is less than 2 the game has ended")
+        context.job_queue.run_once(handle_guess_the_player_end_game_job, when=0, chat_id=update.effective_chat.id,
+                                   name=f"guess_the_player_end_game_job_{update.effective_chat.id}")
+        return
+
+    if err == "end round":
+        context.job_queue.run_once(handle_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
+                                   name=f"guess_the_player_end_round_job_{update.effective_chat.id}")
+        return
+
+    if err == "new curr player":
+        curr_player = await context.bot.get_chat_member(chat_id=update.effective_chat.id, user_id=curr_player_id)
+        curr_player = curr_player.user
+        await update.message.reply_text(f"the game has started the current player is {curr_player.mention_html()}\nsend your player and hints separated by comma ',' and the hints separated by a dash '-' like this\n[player], [hint1-hint2-hint3]",
+                                        parse_mode=ParseMode.HTML)
 
 async def handle_guess_the_player_cancel_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_chat:
