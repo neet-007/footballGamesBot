@@ -73,9 +73,13 @@ The games are inspired by SDS Podcast.
 
 - If no one gets the answer right, the current player gets the point.
 
-- To answer the question, prefix the answer with `the answer is [answer]`.
+- To answer the question, use the command `/{GUESS_THE_PLAYER_ANSWER}[answer]`.
 
-- To ask a question, use the command `/{GUESS_THE_PLAYER_ASK_Q}`. The current player must reply to the question message with their answer.
+- To ask a question, use the command `/{GUESS_THE_PLAYER_ASK_Q}`
+
+- the current player can answer the question using `/{GUESS_THE_PLAYER_ANSWER_Q}[answer]`
+
+- the question will be decuted after its answerd
 
 - There can be only one asked question at a time.
 

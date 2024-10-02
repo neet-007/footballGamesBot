@@ -259,14 +259,14 @@ async def handle_guess_the_player_ask_question_command(update: Update, context: 
     curr_player = await update.effective_chat.get_member(user_id=curr_player_id)
     curr_player = curr_player.user
 
-    await update.message.reply_text(f"{curr_player.mention_html()} answer the question by using command /{GUESS_THE_PLAYER_ANSWER_Q}[answer]", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"{curr_player.mention_html()} answer the question by using the command\n/{GUESS_THE_PLAYER_ANSWER_Q}[answer]", parse_mode=ParseMode.HTML)
 
 async def handle_guess_the_player_answer_question_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_chat or update.effective_chat.type == "private" or not update.effective_user or not context.job_queue:
         return
 
     with get_session() as session:
-        res, err = answer_question_guess_the_player(update.effective_chat.id, update.effective_user.id,
+        res, err, num_questions, player_id = answer_question_guess_the_player(update.effective_chat.id, update.effective_user.id,
                                                     update.message.text.replace(f"/{GUESS_THE_PLAYER_ANSWER_Q}", ""), session)
     if not res:
         if err == "game not found":
@@ -284,7 +284,12 @@ async def handle_guess_the_player_answer_question_command(update: Update, contex
         else:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
-    await update.message.reply_text("a quesiton has been detucted")
+    player = await context.bot.get_chat_member(chat_id=update.effective_chat.id, user_id=player_id)
+    player = player.user
+
+    num_questions_text = f"remaining questions:{num_questions}" if num_questions > 0 else "you dont have any more questions"
+    await update.message.reply_text(f"a quesiton has been detucted from {player.mention_html()}\n{num_questions_text}",
+                                    parse_mode=ParseMode.HTML)
 
 async def handle_guess_the_player_proccess_answer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_chat or update.effective_chat.type == "private" or not update.effective_user or not context.job_queue:
@@ -314,11 +319,11 @@ async def handle_guess_the_player_proccess_answer_command(update: Update, contex
     if err == "correct":
         context.job_queue.run_once(handle_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
                                    name=f"guess_the_player_end_round_job_{update.effective_chat.id}")
-        return await update.message.reply_text("your answer is correct")
+        return await update.message.reply_text("✅  your answer is correct")
     if err == "all players muted":
         context.job_queue.run_once(handle_guess_the_player_end_round_job, when=0, chat_id=update.effective_chat.id,
                                    name=f"guess_the_player_end_round_job_{update.effective_chat.id}")
-        return await update.message.reply_text("you have lost")
+        return await update.message.reply_text("❌  you have lost")
     else:
         return await update.message.reply_text(EXCEPTION_ERROR)
 

@@ -258,10 +258,10 @@ def answer_question_guess_the_player(chat_id:int, player_id:int, answer:str, ses
         with session.begin():
             guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
             if not guess_the_player:
-                return False, "game not found"
+                return False, "game not found", 0, 0
 
             if guess_the_player.state != 2:
-                return False, "state error"
+                return False, "state error", 0, 0
 
             curr_players = (
                 session.query(GuessThePlayerPlayer)
@@ -273,7 +273,8 @@ def answer_question_guess_the_player(chat_id:int, player_id:int, answer:str, ses
             asking_player = None
             curr_player = None
             if not curr_players[0] or not curr_players[1]:
-                return False, "players not in game"
+                return False, "players not in game", 0, 0
+
             if curr_players[0].player_id == player_id:
                 asking_player = curr_players[1]
                 curr_player = curr_players[0]
@@ -282,7 +283,7 @@ def answer_question_guess_the_player(chat_id:int, player_id:int, answer:str, ses
                 curr_player = curr_players[1]
 
             if curr_player.player_id != player_id:
-                return False, "curr player error"
+                return False, "curr player error", 0, 0
     
             question_ = AskedQuestions(
                 question=guess_the_player.curr_question,
@@ -296,10 +297,10 @@ def answer_question_guess_the_player(chat_id:int, player_id:int, answer:str, ses
             guess_the_player.curr_question = ""
 
             session.add(question_)
-            return True, ""
+            return True, "", asking_player.questions, asking_player.player_id
     except Exception as e:
         print(f"An error occurred: {e}")
-        return False, "exception"
+        return False, "exception", 0, 0
 
 def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str, session:Session):
     try:
