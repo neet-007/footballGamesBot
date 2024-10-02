@@ -253,7 +253,7 @@ def ask_question_guess_the_player(chat_id:int, player_id:int, question:str, sess
         print(f"An error occurred: {e}")
         return False, "exception", -1
 
-def answer_question_guess_the_player(chat_id:int, player_id:int, player_asked_id:int, question:str, answer:str, session:Session):
+def answer_question_guess_the_player(chat_id:int, player_id:int, answer:str, session:Session):
     try:
         with session.begin():
             guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
@@ -269,26 +269,23 @@ def answer_question_guess_the_player(chat_id:int, player_id:int, player_asked_id
                             GuessThePlayerPlayer.id == guess_the_player.current_player_id))
                 .all()
             )
+
             asking_player = None
             curr_player = None
             if not curr_players[0] or not curr_players[1]:
                 return False, "players not in game"
-            if curr_players[0].player_id == player_asked_id:
-                asking_player = curr_players[0]
-                curr_player = curr_players[1]
-            else:
+            if curr_players[0].player_id == player_id:
                 asking_player = curr_players[1]
                 curr_player = curr_players[0]
-
-            question = question.lower().strip()
-            if guess_the_player.curr_question != question:
-                return False, "not the question"
+            else:
+                asking_player = curr_players[0]
+                curr_player = curr_players[1]
 
             if curr_player.player_id != player_id:
                 return False, "curr player error"
     
             question_ = AskedQuestions(
-                question=question,
+                question=guess_the_player.curr_question,
                 answer=answer.lower().strip(),
                 guess_the_player_id=chat_id
             )

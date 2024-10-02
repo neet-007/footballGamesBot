@@ -14,7 +14,7 @@ PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
 NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_draft"
 EXCEPTION_ERROR = "internal error happend please try again later"
 STATE_ERROR = "game error happend\n or this is not the time for this command"
-CURR_PLAYER_ERROR = "❌ your are not the current player"
+CURR_PLAYER_ERROR = "❌  your are not the current player"
 
 JOBS_END_TIME_SECONDS = 180
 JOBS_REPEATING_INTERVAL = 20
@@ -24,6 +24,7 @@ DRAFT_NEW_COMMAND = "draft_new"
 DRAFT_JOIN_COMMAND = "draft_join"
 DRAFT_START_COMMAND = "draft_start"
 DRAFT_SET_STATE_COMMAND = "draft_set_state"
+DRAFT_ADD_POS_COMMAND = "draft_add_pos"
 DRAFT_START_VOTE_COMMAND = "draft_start_vote"
 DRAFT_END_VOTE_COMMAND = "draft_end_vote"
 DRAFT_LEAVE_GAME_COMMAND = "draft_leave_game"
@@ -414,13 +415,13 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
 
     await context.bot.send_message(text=f"the team is {team} now choose your {FORMATIONS[formation][curr_pos]}", chat_id=update.effective_chat.id)
 
-async def handle_draft_add_pos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
         return
 
     with get_session() as session:
         res, status, other = add_pos_to_team_draft(update.effective_chat.id, update.effective_user.id,
-                                            update.message.text.lower().strip().replace("player", ""), session)
+                                            update.message.text.lower().strip().replace(f"/{DRAFT_ADD_POS_COMMAND}", ""), session)
     if not res:
         if status == "no game found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -431,11 +432,11 @@ async def handle_draft_add_pos(update: Update, context: ContextTypes.DEFAULT_TYP
         if status == "state error":
             return await update.message.reply_text(STATE_ERROR)
         if status == "picked_pos_error":
-            return await update.message.reply_text("player has already picked this position")
+            return await update.message.reply_text("❌ player has already picked this position")
         if status == "picked_team_error":
-            return await update.message.reply_text("this team has already passed")
+            return await update.message.reply_text("❌ this team has already passed")
         if status == "taken player error":
-            return await update.message.reply_text("this player is taken")
+            return await update.message.reply_text("❌ this player is taken")
         if status == "expection":
             return await update.message.reply_text(EXCEPTION_ERROR)
         else:
@@ -841,6 +842,7 @@ draft_new_handler = CommandHandler(DRAFT_NEW_COMMAND, handle_draft_new)
 draft_join_handler = CommandHandler(DRAFT_JOIN_COMMAND, handle_draft_join)
 draft_start_handler = CommandHandler(DRAFT_START_COMMAND, handle_draft_start)
 draft_set_state_handler = CommandHandler(DRAFT_SET_STATE_COMMAND, handle_draft_set_state)
+draft_add_pos_handler = CommandHandler(DRAFT_ADD_POS_COMMAND, handle_draft_add_pos_command)
 draft_cancel_game_handler = CommandHandler(DRAFT_CANCEL_GAME_COMMAND, handle_draft_cancel_game)
 draft_end_vote_handler = CommandHandler(DRAFT_END_VOTE_COMMAND, handle_draft_end_votes_command)
 draft_start_vote_handler = CommandHandler(DRAFT_START_VOTE_COMMAND, handle_draft_start_votes_command)

@@ -20,7 +20,10 @@ JOBS_REPEATING_FIRST = 10
 GUESS_THE_PLAYER_NEW = "guess_the_player_new"
 GUESS_THE_PLAYER_JOIN = "guess_the_player_join"
 GUESS_THE_PLAYER_START = "guess_the_player_start"
+GUESS_THE_PLAYER_SET_STATE = "guess_the_player_set_state"
 GUESS_THE_PLAYER_ASK_Q = "guess_the_player_ask_q"
+GUESS_THE_PLAYER_ANSWER_Q = "guess_the_player_answer_q"
+GUESS_THE_PLAYER_ANSWER = "guess_the_player_answer"
 GUESS_THE_PLAYER_GET_QUESTIONS = "guess_the_player_get_questions"
 GUESS_THE_PLAYER_LEAVE_GAME = "guess_the_player_leave_game"
 GUESS_THE_PLAYER_CANCEL_GAME = "guess_the_player_cancel_game"
@@ -194,11 +197,11 @@ async def handle_guess_the_player_start_game_command(update: Update, context: Co
     await update.message.reply_text(f"the game has started the current player is {curr_player.mention_html()}\nsend your player and hints separated by comma ',' and the hints separated by a dash '-' like this\n[player], [hint1-hint2-hint3]",
                                     parse_mode=ParseMode.HTML)
 
-async def handle_guess_the_player_start_round(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_guess_the_player_set_state_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or update.effective_chat.type != "private":
         return
 
-    text = update.message.text.lower().split(",")
+    text = update.message.text.lower().replace(f"/{GUESS_THE_PLAYER_SET_STATE}", "").split(",")
     if len(text) != 2:
         return await update.message.reply_text("must provide the player and hints separated by comma ','\n[player], [hint1-hint2-hint3]")
 
@@ -228,12 +231,12 @@ async def handle_guess_the_player_start_round(update: Update, context: ContextTy
     await context.bot.send_message(text=f"the current hints are\n{hints}\n every player has 3 questions and 2 tries\nuse answer is followed by the player\nanswer is [player]", chat_id=chat_id)
 
 async def handle_guess_the_player_ask_question_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text or not update.effective_chat or not update.effective_user or not context.job_queue or not update.message.text or update.effective_chat.type == "private":
+    if not update.message or not update.message.text or not update.effective_chat or not update.effective_user or update.effective_chat.type == "private" or not context.job_queue or not update.message.text or update.effective_chat.type == "private":
         return
 
     with get_session() as session:
         res, err, curr_player_id = ask_question_guess_the_player(update.effective_chat.id, update.effective_user.id,
-                                                 update.message.text.replace(GUESS_THE_PLAYER_ASK_Q, "").lower().strip(), session)
+                                                 update.message.text.replace(f"/{GUESS_THE_PLAYER_ASK_Q}", "").lower().strip(), session)
         print(err)
     if not res:
         if err == "no game found":
@@ -256,17 +259,15 @@ async def handle_guess_the_player_ask_question_command(update: Update, context: 
     curr_player = await update.effective_chat.get_member(user_id=curr_player_id)
     curr_player = curr_player.user
 
-    await update.message.reply_text(f"{curr_player.mention_html()} answer the question by replying to the qeustion message", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(f"{curr_player.mention_html()} answer the question by using command /{GUESS_THE_PLAYER_ANSWER_Q}[answer]", parse_mode=ParseMode.HTML)
 
-async def handle_guess_the_player_answer_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.reply_to_message or not update.message.reply_to_message.from_user or not update.message.text or not update.effective_chat or not update.effective_user or not context.job_queue or not update.message.reply_to_message.text:
+async def handle_guess_the_player_answer_question_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text or not update.effective_chat or update.effective_chat.type == "private" or not update.effective_user or not context.job_queue:
         return
 
     with get_session() as session:
         res, err = answer_question_guess_the_player(update.effective_chat.id, update.effective_user.id,
-                                                    update.message.reply_to_message.from_user.id,
-                                                    update.message.reply_to_message.text.replace(GUESS_THE_PLAYER_ASK_Q, ""),
-                                                    update.message.text, session)
+                                                    update.message.text.replace(f"/{GUESS_THE_PLAYER_ANSWER_Q}", ""), session)
     if not res:
         if err == "game not found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -286,15 +287,12 @@ async def handle_guess_the_player_answer_question(update: Update, context: Conte
     await update.message.reply_text("a quesiton has been detucted")
 
 async def handle_guess_the_player_proccess_answer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text or not update.effective_chat or not update.effective_user or not context.job_queue:
+    if not update.message or not update.message.text or not update.effective_chat or update.effective_chat.type == "private" or not update.effective_user or not context.job_queue:
         return
-
-    if update.effective_chat.type == "private":
-        return await handle_guess_the_player_start_round(update, context)
 
     with get_session() as session:
         res, err = proccess_answer_guess_the_player(update.effective_chat.id, update.effective_user.id,
-                                                    update.message.text.lower().strip().replace("answer is", ""), session)
+                                                    update.message.text.lower().strip().replace(f"/{GUESS_THE_PLAYER_ANSWER}", ""), session)
     if not res:
         if err == "game not found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -305,7 +303,7 @@ async def handle_guess_the_player_proccess_answer_command(update: Update, contex
         if err == "curr player error":
             return await update.message.reply_text(CURR_PLAYER_ERROR)
         if err == "muted player":
-            return await update.message.reply_text("you are muted")
+            return await update.message.reply_text("❌  you are muted")
         if err == "exception":
             return await update.message.reply_text(EXCEPTION_ERROR)
         else:
@@ -455,7 +453,10 @@ new_db_handler = CommandHandler("new_db", handle_new_db)
 guess_the_player_new_game_command_handler = CommandHandler(GUESS_THE_PLAYER_NEW, handle_guess_the_player_new_game)
 guess_the_player_join_game_command_handler = CommandHandler(GUESS_THE_PLAYER_JOIN, handle_guess_the_player_join_command)
 guess_the_player_start_game_command_handler = CommandHandler(GUESS_THE_PLAYER_START, handle_guess_the_player_start_game_command)
+guess_the_player_set_state_command_handler = CommandHandler(GUESS_THE_PLAYER_SET_STATE, handle_guess_the_player_set_state_command)
 guess_the_player_ask_question_command_handler = CommandHandler(GUESS_THE_PLAYER_ASK_Q, handle_guess_the_player_ask_question_command)
+guess_the_player_answer_question_command_handler = CommandHandler(GUESS_THE_PLAYER_ANSWER_Q, handle_guess_the_player_answer_question_command)
+guess_the_player_proccess_answer_command_handler = CommandHandler(GUESS_THE_PLAYER_ANSWER, handle_guess_the_player_proccess_answer_command)
 guess_the_player_leave_game_command_handler = CommandHandler(GUESS_THE_PLAYER_LEAVE_GAME, handle_guess_the_player_leave_game)
 guess_the_player_cancel_game_command_handler = CommandHandler(GUESS_THE_PLAYER_CANCEL_GAME, handle_guess_the_player_cancel_game)
 guess_thE_player_get_questions_command_handler = CommandHandler(GUESS_THE_PLAYER_GET_QUESTIONS, handle_guess_the_player_get_questions)

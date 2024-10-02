@@ -8,8 +8,8 @@ import traceback
 from json import dumps
 from html import escape
 
-from games.draft_handlers import DRAFT_CANCEL_GAME_COMMAND, DRAFT_END_VOTE_COMMAND, DRAFT_JOIN_COMMAND, DRAFT_NEW_COMMAND, DRAFT_SET_STATE_COMMAND, DRAFT_START_COMMAND, DRAFT_START_VOTE_COMMAND, handle_draft_add_pos
-from games.guess_the_player_handlers import GUESS_THE_PLAYER_ASK_Q, GUESS_THE_PLAYER_CANCEL_GAME, GUESS_THE_PLAYER_GET_QUESTIONS, GUESS_THE_PLAYER_JOIN, GUESS_THE_PLAYER_LEAVE_GAME, GUESS_THE_PLAYER_NEW, GUESS_THE_PLAYER_START, handle_guess_the_player_answer_question, handle_guess_the_player_proccess_answer_command, handle_guess_the_player_start_round
+from games.draft_handlers import DRAFT_ADD_POS_COMMAND, DRAFT_CANCEL_GAME_COMMAND, DRAFT_END_VOTE_COMMAND, DRAFT_JOIN_COMMAND, DRAFT_NEW_COMMAND, DRAFT_SET_STATE_COMMAND, DRAFT_START_COMMAND, DRAFT_START_VOTE_COMMAND
+from games.guess_the_player_handlers import GUESS_THE_PLAYER_ANSWER, GUESS_THE_PLAYER_ANSWER_Q, GUESS_THE_PLAYER_ASK_Q, GUESS_THE_PLAYER_CANCEL_GAME, GUESS_THE_PLAYER_GET_QUESTIONS, GUESS_THE_PLAYER_JOIN, GUESS_THE_PLAYER_LEAVE_GAME, GUESS_THE_PLAYER_NEW, GUESS_THE_PLAYER_START 
 
 async def handle_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
     if not update.message:
@@ -30,6 +30,7 @@ async def handle_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
 - /{DRAFT_JOIN_COMMAND} to join a draft game
 - /{DRAFT_START_COMMAND} to start the draft game
 - /{DRAFT_SET_STATE_COMMAND} to set the draft game states category, formation and teams
+- /{DRAFT_ADD_POS_COMMAND} to add a player to the position
 - /{DRAFT_START_VOTE_COMMAND} to get the voting for teams
 - /{DRAFT_END_VOTE_COMMAND} to end the current vote
 - /{DRAFT_END_VOTE_COMMAND} to leave draft game
@@ -40,6 +41,8 @@ async def handle_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
 - /{GUESS_THE_PLAYER_JOIN} to join a guess the player game
 - /{GUESS_THE_PLAYER_START} to start a guess the player game
 - /{GUESS_THE_PLAYER_ASK_Q} to ask a questino in guess the player game
+- /{GUESS_THE_PLAYER_ANSWER_Q} to answer a questino asked in guess the player game
+- /{GUESS_THE_PLAYER_ANSWER} to give your answer to the player
 - /{GUESS_THE_PLAYER_GET_QUESTIONS} to get the asked question in guess the player game
 - /{GUESS_THE_PLAYER_LEAVE_GAME} to leave guess the player game
 - /{GUESS_THE_PLAYER_CANCEL_GAME} to cancel guess the player game
@@ -99,6 +102,7 @@ The games are inspired by SDS Podcast.
 - At the end of the round, the teams will be displayed, and you must decide the best team to vote for.
     """, parse_mode=ParseMode.HTML)
 
+"""
 async def message_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or not update.effective_user or not update.message or not update.message.text:
         return
@@ -115,7 +119,7 @@ async def message_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return await handle_draft_add_pos(update, context)
     else:
         await update.message.reply_text("if you are in guess the player game start answer with 'answer is'\nif you are in draft game start player added with 'player'")
-
+"""
 def check_rate_limit_function(player_id):
         with get_session() as session:
             res, err = check_rate_limit(player_id, session)
