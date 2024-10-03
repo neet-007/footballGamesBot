@@ -1,5 +1,5 @@
-from sqlalchemy import delete, exists, func, insert, or_, select, update
-from sqlalchemy.orm import Session, query
+from sqlalchemy import and_, delete, exists, func, insert, select, update
+from sqlalchemy.orm import Session
 from db.models import AskedQuestions, Game, GuessThePlayer, GuessThePlayerPlayer, guess_the_player_guess_the_player_player_association
 from utils.jaro_winkler import jaro_winkler_similarity
 
@@ -332,21 +332,21 @@ def answer_question_guess_the_player(chat_id:int, player_id:int, answer:str, ses
 def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str, session:Session):
     try:
         with session.begin():
-            guess_the_player_state_curr_player_curr_answer = (
+            guess_the_player = (
                 session.query(GuessThePlayer.state,
                               GuessThePlayer.current_player_id,
                               GuessThePlayer.curr_answer,
-                              GuessThePlayer.num_players)
+                              GuessThePlayer.num_players,)
                         .filter(GuessThePlayer.chat_id == chat_id)
                         .first()
             )
-            if not guess_the_player_state_curr_player_curr_answer:
+            if not guess_the_player:
                 return False, "game not found"
 
-            if guess_the_player_state_curr_player_curr_answer[0] != 2:
+            if guess_the_player[0] != 2:
                 return False, "state error"
 
-            if guess_the_player_state_curr_player_curr_answer[1] == player_id:
+            if guess_the_player[1] == player_id:
                 return False, "curr player error"
 
             player_id_muted = (
@@ -384,7 +384,7 @@ def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str, ses
                 )
                 session.flush()
 
-            score = jaro_winkler_similarity(answer.strip().lower(), guess_the_player_state_curr_player_curr_answer[2])
+            score = jaro_winkler_similarity(answer.strip().lower(), guess_the_player[2])
             if (len(answer.lower().strip()) > 10 and score > 0.85) or (len(answer.lower().strip()) <= 10 and score > 0.92):
                 (
                     session.query(GuessThePlayer)
@@ -403,7 +403,7 @@ def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str, ses
                 .scalar()
             )
 
-            if muted_players_count == guess_the_player_state_curr_player_curr_answer[3] - 1:
+            if muted_players_count == guess_the_player[3] - 1:
                 (
                     session.query(GuessThePlayer)
                     .filter(GuessThePlayer.chat_id == chat_id)
@@ -420,39 +420,45 @@ def proccess_answer_guess_the_player(chat_id:int, player_id:int, answer:str, ses
 def end_round_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():
-            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
+            guess_the_player= (
+                session.query(GuessThePlayer.state,
+                              GuessThePlayer.winning_player_id,
+                              GuessThePlayer.current_player_id,
+                              GuessThePlayer.curr_round,
+                              GuessThePlayer.num_rounds)
+                        .filter(GuessThePlayer.chat_id == chat_id)
+                        .first()
+            )
             if not guess_the_player:
                 return False, "game not found", -1
 
-            if guess_the_player.state != 3:
+            if guess_the_player[0] != 3:
                 return False, "state error", -1
 
-            if guess_the_player.winning_player_id == None:
-                curr_player = (
-                        session.query(GuessThePlayerPlayer)
-                        .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id,
-                                GuessThePlayerPlayer.id == guess_the_player.current_player_id)
-                        .first()
+            if guess_the_player[1] == None:
+                (
+                    session.query(GuessThePlayerPlayer)
+                    .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id,
+                            GuessThePlayerPlayer.id == guess_the_player[2])
+                    .update({GuessThePlayerPlayer.score:GuessThePlayerPlayer.score + 1})
                 )
-                if not curr_player:
-                    return False, "player not in game", -1
-                curr_player.score += 1
             else: 
-                winning_player = (
-                        session.query(GuessThePlayerPlayer)
-                        .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id,
-                                GuessThePlayerPlayer.id == guess_the_player.winning_player_id)
-                        .first()
+                (
+                    session.query(GuessThePlayerPlayer)
+                    .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id,
+                            GuessThePlayerPlayer.id == guess_the_player[1])
+                    .update({GuessThePlayerPlayer.score:GuessThePlayerPlayer.score + 1})
                 )
-                if not winning_player:
-                    return False, "player not in game", -1
 
-                winning_player.score += 1
-
-            guess_the_player.curr_hints = ["","","",]
-
-            guess_the_player.curr_answer = ""
-            guess_the_player.winning_player_id = None
+            (
+                    session.query(GuessThePlayer)
+                    .filter(GuessThePlayer.chat_id == chat_id)
+                    .update({GuessThePlayer.curr_hints:["", "", ""],
+                             GuessThePlayer.curr_answer:"",
+                             GuessThePlayer.winning_player_id:None,
+                             GuessThePlayer.state:1})
+                    
+            )
             (
                 session.query(GuessThePlayerPlayer).
                 filter(GuessThePlayerPlayer.guess_the_player_id == chat_id)
@@ -477,10 +483,8 @@ def end_round_guess_the_player(chat_id:int, session:Session):
                     .first()
             )
 
-            guess_the_player.state = 1
-
             if not next_player:
-                if guess_the_player.curr_round < guess_the_player.num_rounds:
+                if guess_the_player[3] < guess_the_player[4]:
                     (
                         session.query(GuessThePlayerPlayer).
                         filter(GuessThePlayerPlayer.guess_the_player_id == chat_id)
@@ -512,18 +516,21 @@ def end_round_guess_the_player(chat_id:int, session:Session):
                         .update({"picked":True})
                     )
 
-                    guess_the_player.current_player_id = next_player[0]
-
+                    (
+                        session.query(GuessThePlayer)
+                        .filter(GuessThePlayer.chat_id == chat_id)
+                        .update({GuessThePlayer.current_player_id:next_player[0],
+                                 GuessThePlayer.curr_round:GuessThePlayer.curr_round + 1})
+                    )
                     session.execute(
                         insert(guess_the_player_guess_the_player_player_association).values(
-                            guess_the_player_id=guess_the_player.chat_id,
-                            guess_the_player_player_id=guess_the_player.current_player_id,
+                            guess_the_player_id=chat_id,
+                            guess_the_player_player_id=next_player[0],
                             guess_the_player_player_player_id=next_player[1],
                             time_created=func.now()
                         )
                     )
-                    guess_the_player.curr_round += 1
-                    guess_the_player.state = 1
+
                     return True, "new round", next_player[1]
 
                 return True, "game end", -1
@@ -533,18 +540,19 @@ def end_round_guess_the_player(chat_id:int, session:Session):
                 .filter(GuessThePlayerPlayer.id == next_player[0])
                 .update({"picked":True})
             )
-
-            guess_the_player.current_player_id = next_player[0]
-
+            (
+                session.query(GuessThePlayer)
+                .filter(GuessThePlayer.chat_id == chat_id)
+                .update({GuessThePlayer.current_player_id:next_player[0]})
+            )
             session.execute(
                 insert(guess_the_player_guess_the_player_player_association).values(
-                    guess_the_player_id=guess_the_player.chat_id,
-                    guess_the_player_player_id=guess_the_player.current_player_id,
+                    guess_the_player_id=chat_id,
+                    guess_the_player_player_id=next_player[0],
                     guess_the_player_player_player_id=next_player[1],
                     time_created=func.now()
                 )
             )
-
 
             return True, "round end", next_player[1]
     except Exception as e:
@@ -554,13 +562,11 @@ def end_round_guess_the_player(chat_id:int, session:Session):
 def end_game_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():
-            game = session.query(Game).filter(Game.chat_id == chat_id).first()
-            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
-            if not guess_the_player:
+            if not session.query(exists().where(and_(Game.chat_id == chat_id, GuessThePlayer.chat_id == chat_id))).scalar():
                 return False, "game not found", {}, []
 
             players = (
-                session.query(GuessThePlayerPlayer)
+                session.query(GuessThePlayerPlayer.player_id, GuessThePlayerPlayer.score)
                 .filter(GuessThePlayerPlayer.guess_the_player_id == chat_id)
                 .all()
             )
@@ -568,7 +574,7 @@ def end_game_guess_the_player(chat_id:int, session:Session):
             if not players:
                 return False, "players not found", {}, []
 
-            scores = {player.player_id:player.score for player in players}
+            scores = {player[0]:player[1] for player in players}
             winners = []
             max_score = float('-inf')
             for player, score in scores.items():
@@ -579,8 +585,8 @@ def end_game_guess_the_player(chat_id:int, session:Session):
                     winners = []
                     winners.append(player)
 
-            session.delete(game)
-            session.delete(guess_the_player)
+            session.query(Game).filter(Game.chat_id == chat_id).delete()
+            session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).delete()
             return True, "", scores, winners
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -589,13 +595,11 @@ def end_game_guess_the_player(chat_id:int, session:Session):
 def cancel_game_guess_the_player(chat_id:int, session:Session):
     try:
         with session.begin():
-            game = session.query(Game).filter(Game.chat_id == chat_id).first()
-            guess_the_player = session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).first()
-            if not guess_the_player or not game:
-                return False, "no game found"
+            if not session.query(exists().where(and_(Game.chat_id == chat_id, GuessThePlayer.chat_id == chat_id))).scalar():
+                return False, "game not found"
 
-            session.delete(game)
-            session.delete(guess_the_player)
+            session.query(Game).filter(Game.chat_id == chat_id).delete()
+            session.query(GuessThePlayer).filter(GuessThePlayer.chat_id == chat_id).delete()
             return True, ""
     except Exception as e:
         print(f"An error occurred: {e}")
