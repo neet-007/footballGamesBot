@@ -279,6 +279,30 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
             )
 
             if game.state == 3:
+                return True, "end round", [None, None, None, None]
+            if len(non_picked_players) == 0:
+                return True, "end round", [None, None, None, None]
+
+            game.current_player_id = non_picked_players[0].id
+            session.flush()
+            curr_player = session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).first()
+            if not curr_player:
+                return False, "", [None, None, None, None]
+
+            other = [curr_player.player_id, game.formation_name, game.curr_pos]
+            return True, "same_pos", other
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False, "expection", [None, None, None, None]
+
+def end_round_draft(chat_id:int, session:Session):
+    try:
+        with session.begin():
+            game = session.query(Draft).filter(Draft.chat_id == chat_id).first()
+            if not game:
+                return False, "no game found", [None, None, None, None]
+
+            if game.state == 3:
                 non_picked_players = (
                         session.query(DraftPlayer)
                         .filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picking == False, DraftPlayer.transferd == False)
@@ -319,35 +343,44 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
 
                 other = [curr_player.player_id, game.formation_name, game.curr_pos]
                 return True, "new_transfer", other
-            if len(non_picked_players) == 0:
-                if game.curr_pos == "p11":
-                    game.state = 3
-                    curr_player = session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).first()
-                    if not curr_player:
-                        return False, "", [None, None, None, None]
 
-                    session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picked": False, "picking": False})
-                    query_results = (
-                        session.query(
-                            DraftPlayerTeam.player_id,
-                            DraftPlayer.player_id.label("actual_player_id"),
-                            *[getattr(DraftPlayerTeam, f'p{i}') for i in range(1, 12)]
-                        )
-                        .join(DraftPlayer, DraftPlayer.id == DraftPlayerTeam.player_id)
-                        .filter(DraftPlayerTeam.chat_id == chat_id)
-                        .all()
+            if game.curr_pos == "p11":
+                game.state = 3
+                curr_player = session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).first()
+                if not curr_player:
+                    return False, "", [None, None, None, None]
+
+                session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picked": False, "picking": False})
+                query_results = (
+                    session.query(
+                        DraftPlayerTeam.player_id,
+                        DraftPlayer.player_id.label("actual_player_id"),
+                        *[getattr(DraftPlayerTeam, f'p{i}') for i in range(1, 12)]
                     )
-                    
-                    teams = [
-                        (result.actual_player_id, {f'p{i+1}': result[i+2] for i in range(11)})
-                        for result in query_results
-                    ]
-                    game.current_player_id = curr_player.id
-                    game.picking_player_id = curr_player.id
-                    other = [curr_player.player_id, game.formation_name, game.curr_pos, teams]
-                    return True,"transfer_start", other
+                    .join(DraftPlayer, DraftPlayer.id == DraftPlayerTeam.player_id)
+                    .filter(DraftPlayerTeam.chat_id == chat_id)
+                    .all()
+                )
+                
+                teams = [
+                    (result.actual_player_id, {f'p{i+1}': result[i+2] for i in range(11)})
+                    for result in query_results
+                ]
+                game.current_player_id = curr_player.id
+                game.picking_player_id = curr_player.id
+                other = [curr_player.player_id, game.formation_name, game.curr_pos, teams]
+                return True,"transfer_start", other
 
-                session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picked": False})
+            session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picked": False})
+            session.flush()
+            non_picked_players = (
+                    session.query(DraftPlayer)
+                    .filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picking == False)
+                    .order_by(DraftPlayer.time_join.asc())
+                    .all()
+            )
+            if len(non_picked_players) == 0:
+                session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picking": False})
                 session.flush()
                 non_picked_players = (
                         session.query(DraftPlayer)
@@ -355,42 +388,24 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
                         .order_by(DraftPlayer.time_join.asc())
                         .all()
                 )
-                if len(non_picked_players) == 0:
-                    session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picking": False})
-                    session.flush()
-                    non_picked_players = (
-                            session.query(DraftPlayer)
-                            .filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picking == False)
-                            .order_by(DraftPlayer.time_join.asc())
-                            .all()
-                    )
 
-                game.picking_player_id = non_picked_players[0].id
-                game.current_player_id = non_picked_players[0].id
-                session.execute(
-                    draft_team_association.update()
-                    .where(
-                        draft_team_association.c.draft_id == chat_id,
-                        draft_team_association.c.team_id == game.curr_team_id
-                    )
-                    .values(picked=True)
-                )
-                game.curr_pos = "p" + f"{int(game.curr_pos[1]) + 1}" if len(game.curr_pos) == 2 else  "p" + f"{int(game.curr_pos[1:3]) + 1}"
-                curr_player = session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).first()
-                if not curr_player:
-                    return False, "", [None, None, None, None]
-
-                other = [curr_player.player_id, game.formation_name, game.curr_pos]
-                return True, "new_pos", other
-
+            game.picking_player_id = non_picked_players[0].id
             game.current_player_id = non_picked_players[0].id
-            session.flush()
+            session.execute(
+                draft_team_association.update()
+                .where(
+                    draft_team_association.c.draft_id == chat_id,
+                    draft_team_association.c.team_id == game.curr_team_id
+                )
+                .values(picked=True)
+            )
+            game.curr_pos = "p" + f"{int(game.curr_pos[1]) + 1}" if len(game.curr_pos) == 2 else  "p" + f"{int(game.curr_pos[1:3]) + 1}"
             curr_player = session.query(DraftPlayer).filter(DraftPlayer.id == game.current_player_id).first()
             if not curr_player:
                 return False, "", [None, None, None, None]
 
             other = [curr_player.player_id, game.formation_name, game.curr_pos]
-            return True, "same_pos", other
+            return True, "new_pos", other
     except Exception as e:
         print(f"An error occurred: {e}")
         return False, "expection", [None, None, None, None]

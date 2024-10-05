@@ -7,7 +7,7 @@ from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
 
 from db.connection import get_session
-from games.draft_functions import FORMATIONS, add_pos_to_team_draft, add_vote, cancel_game_draft, check_draft, end_game_draft, get_vote_data, get_vote_results, join_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
+from games.draft_functions import FORMATIONS, add_pos_to_team_draft, add_vote, cancel_game_draft, check_draft, end_game_draft, end_round_draft, get_vote_data, get_vote_results, join_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
 from utils.helpers import remove_jobs
 
 PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
@@ -442,6 +442,40 @@ async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEF
         else:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
+    if status == "end round":
+        return await handle_draft_end_round(update, context)
+
+    elif status == "same_pos":
+        if not other[0] or not other[1] or not other[2]:
+            return await update.message.reply_text(EXCEPTION_ERROR)
+        curr_player = await update.effective_chat.get_member(other[0])
+        return await update.message.reply_text(f"player {curr_player.user.mention_html()} choose your player for {FORMATIONS[other[1]][other[2]]}",
+                                               parse_mode=ParseMode.HTML)
+
+async def handle_draft_end_round(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
+        return
+
+    with get_session() as session:
+        res, status, other = end_round_draft(update.effective_chat.id, session)
+
+    if not res:
+        if status == "no game found":
+            return update.message.reply_text(NO_GAME_ERROR)
+        if status == "expection":
+            return update.message.reply_text(EXCEPTION_ERROR)
+        else:
+            return update.message.reply_text(EXCEPTION_ERROR)
+
+    if status == "new_pos":
+        if not other[0]:
+            return await update.message.reply_text(EXCEPTION_ERROR)
+        start_player = await update.effective_chat.get_member(other[0])
+        return await update.message.reply_text(f"player {start_player.user.mention_html()} press the button to pick team",
+                                               parse_mode=ParseMode.HTML,
+                                               reply_markup=InlineKeyboardMarkup([
+                                                    [InlineKeyboardButton(text="pick team", callback_data="draft_random_team")]
+                                               ]))
     if status == "transfer_start" or status == "new_transfer":
         if not other[0] or not other[1]:
             return await update.message.reply_text(EXCEPTION_ERROR)
@@ -463,23 +497,7 @@ async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEF
                                                     [InlineKeyboardButton(text=formation_["p11"], callback_data="draft_transfer_p11")],
                                                     [InlineKeyboardButton(text="skip", callback_data="draft_transfer_skip")],
                                                ]))
-
-    if status == "new_pos":
-        if not other[0]:
-            return await update.message.reply_text(EXCEPTION_ERROR)
-        start_player = await update.effective_chat.get_member(other[0])
-        return await update.message.reply_text(f"player {start_player.user.mention_html()} press the button to pick team",
-                                               parse_mode=ParseMode.HTML,
-                                               reply_markup=InlineKeyboardMarkup([
-                                                    [InlineKeyboardButton(text="pick team", callback_data="draft_random_team")]
-                                               ]))
-    elif status == "same_pos":
-        if not other[0] or not other[1] or not other[2]:
-            return await update.message.reply_text(EXCEPTION_ERROR)
-        curr_player = await update.effective_chat.get_member(other[0])
-        return await update.message.reply_text(f"player {curr_player.user.mention_html()} choose your player for {FORMATIONS[other[1]][other[2]]}",
-                                               parse_mode=ParseMode.HTML)
-    elif status == "end_game":
+    if status == "end_game":
         if not other[0] or not other[1] or not other[2] or not other[3]:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
@@ -487,6 +505,7 @@ async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEF
         context.job_queue.run_repeating(handle_draft_reapting_votes_job, interval=JOBS_REPEATING_INTERVAL,
                                         first=JOBS_REPEATING_FIRST, data=data, chat_id=update.effective_chat.id,
                                         name=f"draft_reapting_votes_job_{update.effective_chat.id}")
+        print("send votes")
         context.job_queue.run_once(handle_draft_set_votes_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=update.effective_chat.id,
                                    name=f"draft_set_votes_job_{update.effective_chat.id}")
         teams = []
@@ -495,11 +514,10 @@ async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEF
             teams.append((player.user, team))
 
         teams = format_teams(teams, FORMATIONS[other[1]])
+        print("send teeams")
         await context.bot.send_message(text=f"the teams\n{teams}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
         await context.bot.send_message(text=f"the drafting has ended discuss the teams for {JOBS_END_TIME_SECONDS} seconds then vote for the best", chat_id=update.effective_chat.id)
         return
-    else:
-        return await update.message.reply_text(status)
 
 async def handle_draft_reapting_votes_job(context: ContextTypes.DEFAULT_TYPE):
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict):
@@ -609,6 +627,7 @@ async def handle_draft_reapting_votes_end_job(context: ContextTypes.DEFAULT_TYPE
     )
 
 async def handle_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
+    print("heeeeeeeeere")
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
