@@ -351,7 +351,7 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
     position = position.replace("draft_transfer_", "")
 
     with get_session() as session:
-        res, err, team, formation, curr_pos, next_player_id = transfers(update.effective_chat.id, update.effective_user.id, position, session)
+        res, err, other = transfers(update.effective_chat.id, update.effective_user.id, position, session)
     if not res:
         if err == "no game found":
             return await context.bot.send_message(text=NO_GAME_ERROR,
@@ -382,8 +382,11 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
                                                   chat_id=update.effective_chat.id)
 
     if err == "skipped":
-        next_player = await context.bot.get_chat_member(chat_id=update.effective_chat.id, user_id=next_player_id)
-        formation_ = FORMATIONS[formation]
+        if not other[3] or not other[1]:
+            return
+
+        next_player = await context.bot.get_chat_member(chat_id=update.effective_chat.id, user_id=other[3])
+        formation_ = FORMATIONS[other[1]]
         return await context.bot.send_message(chat_id=update.effective_chat.id,
             text=f"player {next_player.user.mention_html()} press the button to pick the position you want to transfer\n if you dont want to transfer then pick skip",
                                                parse_mode=ParseMode.HTML,
@@ -403,6 +406,9 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
                                                ]))
 
     if err == "end_game":
+        if not other[4] or not other[1]:
+            return
+
         data = {"time":datetime.now()}
         context.job_queue.run_repeating(handle_draft_reapting_votes_job, interval=JOBS_REPEATING_INTERVAL,
                                         first=JOBS_REPEATING_FIRST, data=data, chat_id=update.effective_chat.id,
@@ -410,10 +416,20 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
         context.job_queue.run_once(handle_draft_set_votes_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=update.effective_chat.id,
                                    name=f"draft_set_votes_job_{update.effective_chat.id}")
 
+        teams = []
+        for player_id, team in other[4]:
+            player = await update.effective_chat.get_member(player_id)
+            teams.append((player.user, team))
+
+        teams = format_teams(teams, FORMATIONS[other[1]])
+        await context.bot.send_message(text=f"the teams are\n{teams}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
         await context.bot.send_message(text=f"the drafting has ended discuss the teams for {JOBS_END_TIME_SECONDS} seconds then vote for the best", chat_id=update.effective_chat.id)
         return
 
-    await context.bot.send_message(text=f"the team is {team} now choose your {FORMATIONS[formation][curr_pos]}", chat_id=update.effective_chat.id)
+    if not other[1] or not other[2]:
+        return
+
+    await context.bot.send_message(text=f"the team is {other[0]} now choose your {FORMATIONS[other[1]][other[2]]}", chat_id=update.effective_chat.id)
 
 async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text or not update.effective_user or not update.effective_chat or not context.job_queue or update.effective_chat.type == "private":
@@ -505,7 +521,6 @@ async def handle_draft_end_round(update: Update, context: ContextTypes.DEFAULT_T
         context.job_queue.run_repeating(handle_draft_reapting_votes_job, interval=JOBS_REPEATING_INTERVAL,
                                         first=JOBS_REPEATING_FIRST, data=data, chat_id=update.effective_chat.id,
                                         name=f"draft_reapting_votes_job_{update.effective_chat.id}")
-        print("send votes")
         context.job_queue.run_once(handle_draft_set_votes_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=update.effective_chat.id,
                                    name=f"draft_set_votes_job_{update.effective_chat.id}")
         teams = []
@@ -514,7 +529,6 @@ async def handle_draft_end_round(update: Update, context: ContextTypes.DEFAULT_T
             teams.append((player.user, team))
 
         teams = format_teams(teams, FORMATIONS[other[1]])
-        print("send teeams")
         await context.bot.send_message(text=f"the teams\n{teams}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
         await context.bot.send_message(text=f"the drafting has ended discuss the teams for {JOBS_END_TIME_SECONDS} seconds then vote for the best", chat_id=update.effective_chat.id)
         return
@@ -627,7 +641,6 @@ async def handle_draft_reapting_votes_end_job(context: ContextTypes.DEFAULT_TYPE
     )
 
 async def handle_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
-    print("heeeeeeeeere")
     if not context.job or not context.job.chat_id or not isinstance(context.job.data, dict) or not context.job_queue:
         return
 
