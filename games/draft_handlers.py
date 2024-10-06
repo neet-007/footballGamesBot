@@ -354,7 +354,6 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
 
     with get_session() as session:
         res, err, other = transfers(update.effective_chat.id, update.effective_user.id, position, session)
-    print("\n======================\n", err, "\n======================\n")
     if not res:
         if err == "no game found":
             return await context.bot.send_message(text=NO_GAME_ERROR,
