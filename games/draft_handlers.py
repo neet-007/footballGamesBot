@@ -7,7 +7,7 @@ from telegram.ext._handlers.commandhandler import CommandHandler
 from telegram.ext._handlers.pollanswerhandler import PollAnswerHandler
 
 from db.connection import get_session
-from games.draft_functions import FORMATIONS, add_pos_to_team_draft, add_vote, cancel_game_draft, check_draft, end_game_draft, end_round_draft, get_vote_data, get_vote_results, join_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
+from games.draft_functions import FORMATIONS, add_pos_to_team_draft, add_vote, cancel_game_draft, check_draft, end_game_draft, end_round_draft, get_vote_data, get_vote_results, join_game_draft, leave_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
 from utils.helpers import remove_jobs
 
 PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
@@ -555,7 +555,7 @@ async def handle_draft_reapting_votes_job(context: ContextTypes.DEFAULT_TYPE):
             return await context.bot.send_message(chat_id=context.job.chat_id,
                                                   text=EXCEPTION_ERROR)
 
-    if not res or state != 4:
+    if not res or state != 5:
         return await context.bot.send_message(chat_id=context.job.chat_id,
                                               text=STATE_ERROR)
 
@@ -583,7 +583,7 @@ async def handle_draft_start_votes_command(update: Update, context: ContextTypes
         else:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
-    if state != 4:
+    if state != 5:
         return await update.message.reply_text(STATE_ERROR)
     if not players_ids:
         return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
@@ -636,7 +636,7 @@ async def handle_draft_reapting_votes_end_job(context: ContextTypes.DEFAULT_TYPE
             return await context.bot.send_message(chat_id=context.job.chat_id,
                                                   text=EXCEPTION_ERROR)
 
-    if not res or state != 4:
+    if not res or state != 5:
         return await context.bot.send_message(chat_id=context.job.chat_id,
                                               text=STATE_ERROR)
 
@@ -665,7 +665,7 @@ async def handle_draft_set_votes_job(context: ContextTypes.DEFAULT_TYPE):
         else:
             return await context.bot.send_message(chat_id=chat_id, text=EXCEPTION_ERROR)
 
-    if state != 4:
+    if state != 5:
         return await context.bot.send_message(chat_id=chat_id, text=STATE_ERROR)
     if not players_ids:
         return await context.bot.send_message(chat_id=chat_id, text=PLAYER_NOT_IN_GAME_ERROR)
@@ -850,6 +850,77 @@ async def draft_end_game(chat_id, winners, formation, is_won, context: ContextTy
     await context.bot.send_message(text=f"the winners are {winners_text}\n the teams\n{teams}", chat_id=chat_id,
                                    parse_mode=ParseMode.HTML)
 
+async def handle_draft_leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or not update.effective_user or not update.message or not context.job_queue:
+        return
+
+    with get_session() as session:
+        res, err, formation, curr_pos, curr_team, curr_player_id, non_picked_team, teams = leave_game_draft(update.effective_chat.id, update.effective_user.id, session)
+
+    if not res:
+        if err == "no game found":
+            return await update.message.reply_text(NO_GAME_ERROR)
+        if err == "player not in game":
+            return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
+        if err == "exception":
+            return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
+        else:
+            return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
+
+    await update.message.reply_text(f"player {update.effective_user.mention_html()} has left the game",
+                                    parse_mode=ParseMode.HTML)
+    if err == "game canceld":
+        remove_jobs(f"draft_reapting_join_job_{update.effective_chat.id}", context)
+        remove_jobs(f"draft_start_game_job_{update.effective_chat.id}", context)
+        remove_jobs(f"draft_reapting_statement_job_{update.effective_chat.id}", context)
+        remove_jobs(f"draft_set_statement_command_job_{update.effective_chat.id}", context)
+
+        return await update.message.reply_text("the game has been canceld")
+    if err == "game end":
+        remove_jobs(f"draft_reapting_votes_job_{update.effective_chat.id}", context)
+        remove_jobs(f"draft_reapting_end_votes_job_{update.effective_chat.id}", context)
+        remove_jobs(f"draft_end_votes_job_{update.effective_chat.id}", context)
+        remove_jobs(f"draft_set_votes_job_{update.effective_chat.id}", context)
+        teams_ = []
+        for player_id, team in teams:
+            player = await update.effective_chat.get_member(player_id)
+            teams_.append((player.user, team))
+
+        teams_ = format_teams(teams_, FORMATIONS[formation])
+        await context.bot.send_message(text=f"the game has ended\nthe teams are\n{teams_}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
+        return
+
+    if err == "new picking player":
+        curr_player = await update.effective_chat.get_member(curr_player_id)
+        return await update.message.reply_text(f"player {curr_player.user.mention_html()} press the button to pick team",
+                                               parse_mode=ParseMode.HTML,
+                                               reply_markup=InlineKeyboardMarkup([
+                                                    [InlineKeyboardButton(text="pick team", callback_data="draft_random_team")]
+                                           ]))
+    if err == "new current player":
+        non_picked_team = "\n".join([f"🟢 {team}" for team in non_picked_team])
+        await context.bot.send_message(text=f"the team is <strong>{curr_team.capitalize()}</strong> now choose your <strong>{FORMATIONS[formation][curr_pos].upper()}</strong>\nthe reamaining teams are\n{non_picked_team}",
+                                       chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
+    if err == "new transfer player":
+        start_player = await update.effective_chat.get_member(curr_player_id)
+        formation_ = FORMATIONS[formation]
+        return await update.message.reply_text(f"player {start_player.user.mention_html()} press the button to pick the position you want to transfer\n if you dont want to transfer then pick skip",
+                                               parse_mode=ParseMode.HTML,
+                                               reply_markup=InlineKeyboardMarkup([
+                                                    [InlineKeyboardButton(text=formation_["p1"], callback_data="draft_transfer_p1")],
+                                                    [InlineKeyboardButton(text=formation_["p2"], callback_data="draft_transfer_p2")],
+                                                    [InlineKeyboardButton(text=formation_["p3"], callback_data="draft_transfer_p3")],
+                                                    [InlineKeyboardButton(text=formation_["p4"], callback_data="draft_transfer_p4")],
+                                                    [InlineKeyboardButton(text=formation_["p5"], callback_data="draft_transfer_p5")],
+                                                    [InlineKeyboardButton(text=formation_["p6"], callback_data="draft_transfer_p6")],
+                                                    [InlineKeyboardButton(text=formation_["p7"], callback_data="draft_transfer_p7")],
+                                                    [InlineKeyboardButton(text=formation_["p8"], callback_data="draft_transfer_p8")],
+                                                    [InlineKeyboardButton(text=formation_["p9"], callback_data="draft_transfer_p9")],
+                                                    [InlineKeyboardButton(text=formation_["p10"], callback_data="draft_transfer_p10")],
+                                                    [InlineKeyboardButton(text=formation_["p11"], callback_data="draft_transfer_p11")],
+                                                    [InlineKeyboardButton(text="skip", callback_data="draft_transfer_skip")],
+                                               ]))
+
 async def handle_draft_cancel_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat or not update.message:
         return
@@ -881,6 +952,7 @@ draft_start_handler = CommandHandler(DRAFT_START_COMMAND, handle_draft_start)
 draft_set_state_handler = CommandHandler(DRAFT_SET_STATE_COMMAND, handle_draft_set_state)
 draft_add_pos_handler = CommandHandler(DRAFT_ADD_POS_COMMAND, handle_draft_add_pos_command)
 draft_cancel_game_handler = CommandHandler(DRAFT_CANCEL_GAME_COMMAND, handle_draft_cancel_game)
+draft_leave_game_handler = CommandHandler(DRAFT_LEAVE_GAME_COMMAND, handle_draft_leave_game)
 draft_end_vote_handler = CommandHandler(DRAFT_END_VOTE_COMMAND, handle_draft_end_votes_command)
 draft_start_vote_handler = CommandHandler(DRAFT_START_VOTE_COMMAND, handle_draft_start_votes_command)
 draft_vote_recive_handler = PollAnswerHandler(handle_draft_vote_recive)

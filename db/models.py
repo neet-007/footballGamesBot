@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, PrimaryKeyConstraint, String, Table, UniqueConstraint, func, text
 from sqlalchemy.orm import DeclarativeBase, relationship, Mapped, mapped_column
 
@@ -77,8 +77,8 @@ class Draft(Base):
 
     teams = relationship("Team", secondary=draft_team_association, back_populates="drafts", cascade="save-update")
 
-    current_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL", use_alter=True), nullable=True)
-    picking_player_id: Mapped[int] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL", use_alter=True), nullable=True)
+    current_player_id: Mapped[Union[int, None]] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL", use_alter=True), nullable=True)
+    picking_player_id: Mapped[Union[int, None]] = mapped_column(Integer, ForeignKey("draft_player.id", ondelete="SET NULL", use_alter=True), nullable=True)
     curr_team_id: Mapped[int] = mapped_column(Integer, ForeignKey("team.id", ondelete="SET NULL", use_alter=True), nullable=True)
 
     state: Mapped[int] = mapped_column(Integer, default=0)
