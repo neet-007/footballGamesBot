@@ -882,14 +882,12 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
 def cancel_game_draft(chat_id:int, session:Session):
     try:
         with session.begin():
-            game = session.query(Game).filter(Game.chat_id == chat_id).first()
-            draft = session.query(Draft).filter(Draft.chat_id == chat_id).first()
+            game_deleted = session.query(Game).filter(Game.chat_id == chat_id).delete()
+            draft_deleted = session.query(Draft).filter(Draft.chat_id == chat_id).delete()
 
-            if not game or not draft:
+            if game_deleted == 0 or draft_deleted == 0:
                 return False, "no game found"
 
-            session.delete(game)
-            session.delete(draft)
             return True, ""
     except Exception as e:
         print(f"An error occurred: {e}")
