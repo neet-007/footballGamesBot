@@ -292,9 +292,7 @@ def add_pos_to_team_draft(chat_id:int, player_id:int, added_player:str, session:
 
             non_picked_count = non_picked_player_q.count()
 
-            if draft_state_curr_player_curr_team_curr_pos[0] == 4:
-                return True, "end round", [None, None, None, None]
-            if non_picked_count == 0 or not non_picked_player:
+            if draft_state_curr_player_curr_team_curr_pos[0] == 4 or non_picked_count == 0 or not non_picked_player:
                 return True, "end round", [None, None, None, None]
 
             (
@@ -387,7 +385,7 @@ def end_round_draft(chat_id:int, session:Session):
 
             if draft_details[2] == "p11":
                 session.query(Draft).filter(Draft.chat_id == chat_id).update({Draft.state:4})
-                session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picked": False, "picking": False})
+                session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({DraftPlayer.picking: False, DraftPlayer.picked: False})
                 session.flush()
 
                 non_picked_player= (
@@ -437,8 +435,7 @@ def end_round_draft(chat_id:int, session:Session):
                          teams]
                 return True,"transfer_start", other
 
-            #instead of flusing consdire picking them with false
-            session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picked": False})
+            session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({DraftPlayer.picked: False})
             session.flush()
 
             non_picked_player_q = (
@@ -453,8 +450,9 @@ def end_round_draft(chat_id:int, session:Session):
             non_picked_players_count = non_picked_player_q.count()
 
             if non_picked_players_count == 0 or non_picked_player is None:
-                session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picking": False})
+                session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({DraftPlayer.picking: False})
                 session.flush()
+
                 non_picked_player = (
                         session.query(DraftPlayer.id, DraftPlayer.player_id)
                         .filter(DraftPlayer.draft_id == chat_id, DraftPlayer.picking == False)
@@ -813,15 +811,33 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                 return True, "game end", draft.formation_name, "", "", 0, [], teams
 
             # the above is mostly complete the bottom is not
-            new_picking_player = False
-            new_current_player = False
-            new_transfer_player = False
-            next_picking_player = []
-            next_current_player = []
+            if draft.state == 4:
+                next_player = (
+                    session.query(DraftPlayer.id, DraftPlayer.player_id)
+                    .filter(DraftPlayer.draft_id == chat_id,
+                            DraftPlayer.picking == False,
+                            DraftPlayer.id != player.id,
+                            DraftPlayer.transferd == False)
+                    .order_by(DraftPlayer.time_join.asc())
+                    .first()
+                )
 
-            non_picked_teams = []
-            if draft.picking_player_id == player.id:
-                next_picking_player = (
+                session.delete(player)
+                if not next_player:
+                    return True, "end game", draft.formation_name, "", "", 0, [], []
+
+                non_picked_teams = session.execute(
+                    select(Team.id, Team.name)
+                    .join(draft_team_association, Team.id == draft_team_association.c.team_id)
+                    .where(draft_team_association.c.picked == False,
+                          draft_team_association.c.draft_id == chat_id)
+                ).fetchall()
+                draft.picking_player_id = next_player[0]
+                draft.current_player_id = next_player[0]
+                return True, "new transfer player", draft.formation_name, draft.curr_pos, "", next_player[1], non_picked_teams, []
+
+            if draft.state == 2 and draft.picking_player_id == player.id:
+                next_player = (
                     session.query(DraftPlayer.id, DraftPlayer.player_id)
                     .filter(DraftPlayer.draft_id == chat_id,
                             DraftPlayer.picking == False,
@@ -830,64 +846,49 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                     .first()
                 )
 
-                if not next_picking_player:
-                    session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({"picking": False})
+                session.delete(player)
+                if not next_player:
+                    session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({DraftPlayer.picking: False})
                     session.flush()
-                    next_picking_player = (
-                            session.query(DraftPlayer.id)
-                            .filter(DraftPlayer.draft_id == chat_id,
-                                    DraftPlayer.picking == False)
-                            .order_by(DraftPlayer.time_join.asc())
-                            .first()
+                    next_player = (
+                        session.query(DraftPlayer.id, DraftPlayer.player_id)
+                        .filter(DraftPlayer.draft_id == chat_id,
+                                DraftPlayer.picking == False,
+                                DraftPlayer.id != player.id)
+                        .order_by(DraftPlayer.time_join.asc())
+                        .first()
                     )
-                    if not next_picking_player:
+
+                    if not next_player:
                         return False, "game error", "", "", "", 0, [], []
+    
+                return True, "new picking player", draft.formation_name, draft.curr_pos, "", next_player[1] , [], []
+
+            if draft.state == 3 and draft.current_player_id == player.id:
+                next_player = (
+                    session.query(DraftPlayer.id, DraftPlayer.player_id)
+                    .filter(DraftPlayer.draft_id == chat_id,
+                            DraftPlayer.picked == False,
+                            DraftPlayer.id != player.id)
+                    .order_by(DraftPlayer.time_join.asc())
+                    .first()
+                )
+
+                session.delete(player)
+                if not next_player:
+                    return True, "end round", "", "", "", 0, [], []
+
+                team = session.query(Team.name).filter(Team.id == draft.curr_team_id).first() 
+                if not team:
+                    return False, "game error", "", "", "", 0, [], []
 
                 non_picked_teams = session.execute(
                     select(Team.id, Team.name)
                     .join(draft_team_association, Team.id == draft_team_association.c.team_id)
-                    .where(
-                        draft_team_association.c.picked == False,
-                        draft_team_association.c.draft_id == chat_id
-                    )
-                ).fetchall() or []
-
-                if draft.state == 2:
-                    new_picking_player = True
-                if draft.state == 4:
-                    new_transfer_player = True
-
-                if not next_picking_player:
-                    draft.picking_player_id = None
-                else:
-                    draft.picking_player_id = next_picking_player[0]
-
-            if draft.current_player_id == player.id:
-                next_current_player = (
-                    session.query(DraftPlayer.id, DraftPlayer.player_id)
-                    .filter(DraftPlayer.draft_id == chat_id,
-                            DraftPlayer.picked == False)
-                    .order_by(DraftPlayer.time_join.asc())
-                    .first()
-                ) or []
-
-                if draft.state == 3:
-                    new_current_player = True
-                if draft.state == 4:
-                    new_transfer_player = True
-
-                if not next_current_player:
-                    draft.current_player_id = None
-                else:
-                    draft.current_player_id = next_current_player[0]
-
-            if new_picking_player:
-                team = session.query(Team.name).filter(Team.id == draft.curr_team_id).first() or [""]
-                return True, "new picking player", draft.formation_name, draft.curr_pos, team[0], next_picking_player[1] , [], []
-            if new_current_player:
-                return True, "new current player", draft.formation_name, draft.curr_pos, "", next_current_player[1], [], []
-            if new_transfer_player:
-                return True, "new transfer player", draft.formation_name, draft.curr_pos, "", next_current_player[1], non_picked_teams, []
+                    .where(draft_team_association.c.picked == False,
+                          draft_team_association.c.draft_id == chat_id)
+                ).fetchall()
+                return True, "new current player", draft.formation_name, draft.curr_pos, team[0], next_player[1], non_picked_teams, []
 
             return True, "", "", "", "", 0, [], []
     except Exception as e:

@@ -10,6 +10,9 @@ from db.connection import get_session
 from games.draft_functions import FORMATIONS, add_pos_to_team_draft, add_vote, cancel_game_draft, check_draft, end_game_draft, end_round_draft, get_vote_data, get_vote_results, join_game_draft, leave_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
 from utils.helpers import remove_jobs
 
+import tracemalloc
+tracemalloc.start()
+
 PLAYER_NOT_IN_GAME_ERROR = "player is not in game"
 NO_GAME_ERROR = "there is no game in this chat \nstart one using /new_draft"
 EXCEPTION_ERROR = "internal error happend please try again later"
@@ -442,6 +445,7 @@ async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEF
     with get_session() as session:
         res, status, other = add_pos_to_team_draft(update.effective_chat.id, update.effective_user.id,
                                             update.message.text.lower().strip().replace(f"/{DRAFT_ADD_POS_COMMAND}", ""), session)
+    print("\n=======================\n", status, "\n=======================\n")
     if not res:
         if status == "no game found":
             return await update.message.reply_text(NO_GAME_ERROR)
@@ -479,13 +483,14 @@ async def handle_draft_end_round(update: Update, context: ContextTypes.DEFAULT_T
     with get_session() as session:
         res, status, other = end_round_draft(update.effective_chat.id, session)
 
+    print("\n=======================\n", status, "\n=======================\n")
     if not res:
         if status == "no game found":
-            return update.message.reply_text(NO_GAME_ERROR)
+            return await update.message.reply_text(NO_GAME_ERROR)
         if status == "expection":
-            return update.message.reply_text(EXCEPTION_ERROR)
+            return await update.message.reply_text(EXCEPTION_ERROR)
         else:
-            return update.message.reply_text(EXCEPTION_ERROR)
+            return await update.message.reply_text(EXCEPTION_ERROR)
 
     if status == "new_pos":
         if not other[0]:
@@ -861,10 +866,12 @@ async def handle_draft_leave_game(update: Update, context: ContextTypes.DEFAULT_
             return await update.message.reply_text(NO_GAME_ERROR)
         if err == "player not in game":
             return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
+        if err == "game error":
+            return await update.message.reply_text(EXCEPTION_ERROR)
         if err == "exception":
-            return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
+            return await update.message.reply_text(EXCEPTION_ERROR)
         else:
-            return await update.message.reply_text(PLAYER_NOT_IN_GAME_ERROR)
+            return await update.message.reply_text(EXCEPTION_ERROR)
 
     await update.message.reply_text(f"player {update.effective_user.mention_html()} has left the game",
                                     parse_mode=ParseMode.HTML)
@@ -875,7 +882,7 @@ async def handle_draft_leave_game(update: Update, context: ContextTypes.DEFAULT_
         remove_jobs(f"draft_set_statement_command_job_{update.effective_chat.id}", context)
 
         return await update.message.reply_text("the game has been canceld")
-    if err == "game end":
+    if err == "end game":
         remove_jobs(f"draft_reapting_votes_job_{update.effective_chat.id}", context)
         remove_jobs(f"draft_reapting_end_votes_job_{update.effective_chat.id}", context)
         remove_jobs(f"draft_end_votes_job_{update.effective_chat.id}", context)
@@ -889,6 +896,8 @@ async def handle_draft_leave_game(update: Update, context: ContextTypes.DEFAULT_
         await context.bot.send_message(text=f"the game has ended\nthe teams are\n{teams_}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
         return
 
+    if err == "end round":
+        return
     if err == "new picking player":
         curr_player = await update.effective_chat.get_member(curr_player_id)
         return await update.message.reply_text(f"player {curr_player.user.mention_html()} press the button to pick team",
@@ -898,7 +907,8 @@ async def handle_draft_leave_game(update: Update, context: ContextTypes.DEFAULT_
                                            ]))
     if err == "new current player":
         non_picked_team = "\n".join([f"🟢 {team}" for team in non_picked_team])
-        await context.bot.send_message(text=f"the team is <strong>{curr_team.capitalize()}</strong> now choose your <strong>{FORMATIONS[formation][curr_pos].upper()}</strong>\nthe reamaining teams are\n{non_picked_team}",
+        curr_player = await update.effective_chat.get_member(curr_player_id)
+        return await context.bot.send_message(text=f"player {curr_player.user.mention_html()} is the curr player\nthe team is <strong>{curr_team.capitalize()}</strong> now choose your <strong>{FORMATIONS[formation][curr_pos].upper()}</strong>\nthe reamaining teams are\n{non_picked_team}",
                                        chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
     if err == "new transfer player":
         start_player = await update.effective_chat.get_member(curr_player_id)
