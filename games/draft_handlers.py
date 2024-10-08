@@ -277,7 +277,7 @@ async def handle_draft_set_state(update: Update, context: ContextTypes.DEFAULT_T
         return await update.message.reply_text("there is something missing\nyou must provied the category, teams, foramtation seperated by commas ','")
 
     with get_session() as session:
-        res, err, other = set_game_states_draft(update.effective_chat.id, update.effective_user.id,
+        res, err, num_players, category, formation, teams, curr_player_id = set_game_states_draft(update.effective_chat.id, update.effective_user.id,
                                 text[0].strip(), text[1].split("-"), text[2].strip(), session)
     if not res:
         if err == "state error":
@@ -289,7 +289,7 @@ async def handle_draft_set_state(update: Update, context: ContextTypes.DEFAULT_T
         if err == "no category error":
             return await update.message.reply_text("no category provided")
         if err == "num of teams error":
-            return await update.message.reply_text(f"number of teams must be {11 + other[0]}")
+            return await update.message.reply_text(f"number of teams must be {11 + num_players}")
         if err == "formation error":
             return await update.message.reply_text("formation must be 442 or 443 or 4231 or 352 or 523 written like this")
         if err == "duplicate teams error":
@@ -299,8 +299,8 @@ async def handle_draft_set_state(update: Update, context: ContextTypes.DEFAULT_T
         else:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
-    curr_player = await update.effective_chat.get_member(other[4])
-    await update.message.reply_text(f"the category is {other[1]} the formation is {other[2]} the availabe teams are f{other[3]}",
+    curr_player = await update.effective_chat.get_member(curr_player_id)
+    await update.message.reply_text(f"the category is {category} the formation is {formation} the availabe teams are f{teams}",
                                     parse_mode=ParseMode.HTML)
     return await update.message.reply_text(f"player {curr_player.user.mention_html()} press the button to pick team",
                                            parse_mode=ParseMode.HTML,
@@ -356,7 +356,8 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
     position = position.replace("draft_transfer_", "")
 
     with get_session() as session:
-        res, err, other = transfers(update.effective_chat.id, update.effective_user.id, position, session)
+        res, err, team_name, formation, curr_pos, next_player_id, teams, non_picked_teams = transfers(update.effective_chat.id, update.effective_user.id, position, session)
+
     if not res:
         if err == "no game found":
             return await context.bot.send_message(text=NO_GAME_ERROR,
@@ -387,11 +388,11 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
                                                   chat_id=update.effective_chat.id)
 
     if err == "skipped":
-        if not other[3] or not other[1]:
+        if not next_player_id or not formation:
             return
 
-        next_player = await context.bot.get_chat_member(chat_id=update.effective_chat.id, user_id=other[3])
-        formation_ = FORMATIONS[other[1]]
+        next_player = await context.bot.get_chat_member(chat_id=update.effective_chat.id, user_id=next_player_id)
+        formation_ = FORMATIONS[formation]
         return await context.bot.send_message(chat_id=update.effective_chat.id,
             text=f"player {next_player.user.mention_html()} press the button to pick the position you want to transfer\n if you dont want to transfer then pick skip",
                                                parse_mode=ParseMode.HTML,
@@ -411,7 +412,7 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
                                                ]))
 
     if err == "end_game":
-        if not other[4] or not other[1]:
+        if not teams or not formation:
             return
 
         data = {"time":datetime.now()}
@@ -421,21 +422,21 @@ async def handle_draft_transfer_callback(update: Update, context: ContextTypes.D
         context.job_queue.run_once(handle_draft_set_votes_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=update.effective_chat.id,
                                    name=f"draft_set_votes_job_{update.effective_chat.id}")
 
-        teams = []
-        for player_id, team in other[4]:
+        teams_ = []
+        for player_id, team in teams:
             player = await update.effective_chat.get_member(player_id)
-            teams.append((player.user, team))
+            teams_.append((player.user, team))
 
-        teams = format_teams(teams, FORMATIONS[other[1]])
-        await context.bot.send_message(text=f"the teams are\n{teams}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
+        teams_ = format_teams(teams_, FORMATIONS[formation])
+        await context.bot.send_message(text=f"the teams are\n{teams_}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
         await context.bot.send_message(text=f"the drafting has ended discuss the teams for {JOBS_END_TIME_SECONDS} seconds then vote for the best", chat_id=update.effective_chat.id)
         return
 
-    if other[0] is None or other[1] is None or other[2] is None or other[5] is None:
+    if team_name is None or formation is None or curr_pos is None or non_picked_teams  is None:
         return
 
-    non_picked_team = "\n".join([f"🟢 {team}" for team in other[5]])
-    await context.bot.send_message(text=f"the team is <strong>{other[0].capitalize()}</strong> now choose your <strong>{FORMATIONS[other[1]][other[2]].upper()}</strong>\nthe reamaining teams are\n{non_picked_team}",
+    non_picked_team = "\n".join([f"🟢 {team}" for team in non_picked_teams])
+    await context.bot.send_message(text=f"the team is <strong>{team_name.capitalize()}</strong> now choose your <strong>{FORMATIONS[formation][curr_pos].upper()}</strong>\nthe reamaining teams are\n{non_picked_team}",
                                    chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
 
 async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -443,7 +444,7 @@ async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEF
         return
 
     with get_session() as session:
-        res, status, other = add_pos_to_team_draft(update.effective_chat.id, update.effective_user.id,
+        res, status, curr_player_id, curr_pos, formation = add_pos_to_team_draft(update.effective_chat.id, update.effective_user.id,
                                             update.message.text.lower().strip().replace(f"/{DRAFT_ADD_POS_COMMAND}", ""), session)
     print("\n=======================\n", status, "\n=======================\n")
     if not res:
@@ -470,10 +471,10 @@ async def handle_draft_add_pos_command(update: Update, context: ContextTypes.DEF
         return await handle_draft_end_round(update, context)
 
     elif status == "same_pos":
-        if not other[0] or not other[1] or not other[2]:
+        if not curr_player_id or not curr_pos or not formation:
             return await update.message.reply_text(EXCEPTION_ERROR)
-        curr_player = await update.effective_chat.get_member(other[0])
-        return await update.message.reply_text(f"player {curr_player.user.mention_html()} choose your player for {FORMATIONS[other[1]][other[2]].upper()}",
+        curr_player = await update.effective_chat.get_member(curr_player_id)
+        return await update.message.reply_text(f"player {curr_player.user.mention_html()} choose your player for {FORMATIONS[formation][curr_pos].upper()}",
                                                parse_mode=ParseMode.HTML)
 
 async def handle_draft_end_round(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -481,7 +482,7 @@ async def handle_draft_end_round(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     with get_session() as session:
-        res, status, other = end_round_draft(update.effective_chat.id, session)
+        res, status, curr_player_id, formation, teams = end_round_draft(update.effective_chat.id, session)
 
     print("\n=======================\n", status, "\n=======================\n")
     if not res:
@@ -493,19 +494,19 @@ async def handle_draft_end_round(update: Update, context: ContextTypes.DEFAULT_T
             return await update.message.reply_text(EXCEPTION_ERROR)
 
     if status == "new_pos":
-        if not other[0]:
+        if not curr_player_id:
             return await update.message.reply_text(EXCEPTION_ERROR)
-        start_player = await update.effective_chat.get_member(other[0])
+        start_player = await update.effective_chat.get_member(curr_player_id)
         return await update.message.reply_text(f"player {start_player.user.mention_html()} press the button to pick team",
                                                parse_mode=ParseMode.HTML,
                                                reply_markup=InlineKeyboardMarkup([
                                                     [InlineKeyboardButton(text="pick team", callback_data="draft_random_team")]
                                                ]))
     if status == "transfer_start" or status == "new_transfer":
-        if not other[0] or not other[1]:
+        if not curr_player_id or not formation:
             return await update.message.reply_text(EXCEPTION_ERROR)
-        start_player = await update.effective_chat.get_member(other[0])
-        formation_ = FORMATIONS[other[1]]
+        start_player = await update.effective_chat.get_member(curr_player_id)
+        formation_ = FORMATIONS[formation]
         return await update.message.reply_text(f"player {start_player.user.mention_html()} press the button to pick the position you want to transfer\n if you dont want to transfer then pick skip",
                                                parse_mode=ParseMode.HTML,
                                                reply_markup=InlineKeyboardMarkup([
@@ -523,7 +524,7 @@ async def handle_draft_end_round(update: Update, context: ContextTypes.DEFAULT_T
                                                     [InlineKeyboardButton(text="skip", callback_data="draft_transfer_skip")],
                                                ]))
     if status == "end_game":
-        if not other[0] or not other[1] or not other[2] or not other[3]:
+        if not formation or not teams:
             return await update.message.reply_text(EXCEPTION_ERROR)
 
         data = {"time":datetime.now()}
@@ -532,13 +533,13 @@ async def handle_draft_end_round(update: Update, context: ContextTypes.DEFAULT_T
                                         name=f"draft_reapting_votes_job_{update.effective_chat.id}")
         context.job_queue.run_once(handle_draft_set_votes_job, when=JOBS_END_TIME_SECONDS, data=data, chat_id=update.effective_chat.id,
                                    name=f"draft_set_votes_job_{update.effective_chat.id}")
-        teams = []
-        for player_id, team in other[3]:
+        teams_ = []
+        for player_id, team in teams:
             player = await update.effective_chat.get_member(player_id)
-            teams.append((player.user, team))
+            teams_.append((player.user, team))
 
-        teams = format_teams(teams, FORMATIONS[other[1]])
-        await context.bot.send_message(text=f"the teams\n{teams}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
+        teams_ = format_teams(teams_, FORMATIONS[formation])
+        await context.bot.send_message(text=f"the teams\n{teams_}", chat_id=update.effective_chat.id, parse_mode=ParseMode.HTML)
         await context.bot.send_message(text=f"the drafting has ended discuss the teams for {JOBS_END_TIME_SECONDS} seconds then vote for the best", chat_id=update.effective_chat.id)
         return
 
