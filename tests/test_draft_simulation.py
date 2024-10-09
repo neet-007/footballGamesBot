@@ -282,6 +282,7 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                 assert (team_name in teams) is True
                 assert formation_name == formation
                 assert curr_pos == f"p{pos + 1}"
+                #also assert what the teams are
                 assert len(non_picked_teams) == (num_players + 11) - pos - 1
 
             added_pos_futures = {}
@@ -315,20 +316,7 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                         assert formation_ == formation
                         assert curr_pos_ == f"p{pos + 1}"
                     curr_players[game] = curr_player_id
-                    """
-                    assert (isinstance(other[3], list)) is True
-                    for tup in other[3]:
-                        assert (isinstance(tup, tuple)) is True
-                        assert (tup[0] in test_input["players"]) is True
-                        assert (isinstance(tup[1], dict)) is True
-                    print("\n==========================\n", "dicts", "\n==========================\n")
-                    print("\n                          \n", "db", "\n                          \n")
-                    pprint(sorted(other[3], key=lambda x: x[0]))
-                    print("\n                          \n", "test", "\n                          \n")
-                    pprint(sorted(players_teams[game], key=lambda x: x[0]))
-                    print("\n==========================\n", "dicts", "\n==========================\n")
-                    assert (sorted(other[3], key=lambda x: x[0]) == sorted(players_teams[game], key=lambda x: x[0]))
-                    """
+
             games_with_round_ended = {}
             for game in valid_games:
                 games_with_round_ended[game] = executor.submit(thread_safe_end_round, game, Session)
@@ -344,6 +332,7 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                     assert err == "transfer_start"
                     assert (curr_player_id in test_input["players"]) is True
                     assert formation_ == formation
+                    assert (sorted(teams, key=lambda x: x[0]) == sorted(players_teams[game], key=lambda x: x[0]))
                 else:
                     formation = game_data[game]["formation"]
                     assert res is True
@@ -352,7 +341,6 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                     assert formation_ == formation
                 curr_players[game] = curr_player_id
                 picking_players[game] = curr_player_id
-                
 
         for i in range(num_players):
             transfers_futures = {}
@@ -365,6 +353,7 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                 transfers_futures[game] = executor.submit(thread_safe_transfers, game, current_player, rand_pos, Session)
                 added_player = f"{game}{current_player}{rand_pos}"
         
+            # add check for skipping
             for game, future in transfers_futures.items():
                 res, err, team_name, formation_name, curr_pos, curr_player_id, teams, non_picked_teams = future.result()
 
@@ -374,13 +363,17 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                 formation = game_data[game]["formation"]
                 assert res is True
                 assert err == ""
+                assert curr_pos == game_pos[game]
                 assert (team_name in teams) is True
                 assert formation_name == formation
+                #also check what the teams are
                 assert len(non_picked_teams) == num_players - (i + 1)
 
             for game, curr_player in curr_players.items():
                 added_player = f"{game}{curr_player}transfer"
-
+                for item in players_teams[game]:
+                    if item[0] == curr_player:
+                        item[1][game_pos[game]] = added_player
                 added_pos_futures[game] = executor.submit(thread_safe_add_pos_to_team, game, curr_player, added_player, Session)
 
             for game, future in added_pos_futures.items():
@@ -513,7 +506,10 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
             assert res is True
             assert err == ""
             assert formation == formation_name
-            #assert (sorted(teams, key=lambda x: x[0]) == sorted(players_teams[game], key=lambda x: x[0]))
+            assert (sorted(teams, key=lambda x: x[0]) == sorted(players_teams[game], key=lambda x: x[0]))
+
+            pprint(sorted(teams, key=lambda x: x[0]))
+            pprint(sorted(players_teams[game], key=lambda x: x[0]))
         print("=====================\n")
 
 
