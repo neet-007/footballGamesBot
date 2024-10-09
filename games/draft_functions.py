@@ -565,7 +565,7 @@ def transfers(chat_id:int, player_id:int, position:str, session:Session):
                 .update({Draft.curr_team_id:rand_team[0],
                          Draft.curr_pos:position})
             )
-            return True, "", rand_team[1], draft_details[2], draft_details[3], None, None, [team[1] for team in non_picked_teams if team[0] != rand_team[0]]
+            return True, "", rand_team[1], draft_details[2], position, None, None, [team[1] for team in non_picked_teams if team[0] != rand_team[0]]
     except Exception as e:
         print(f"An error occurred: {e}")
         return False, "expection", None, None, None, None, None, None
