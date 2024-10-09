@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import func  
 from db.models import Game, GuessThePlayer
-from games.guess_the_player_functions import cancel_game_guess_the_player, join_game_guess_the_player, new_game_guess_the_player, proccess_answer_guess_the_player, start_game_guess_the_player, start_round_guess_the_player
+from games.guess_the_player_functions import cancel_game_guess_the_player, join_game_guess_the_player, new_game_guess_the_player, start_game_guess_the_player
 from .conftest import new_db, drop_db
 
 @pytest.mark.parametrize("test_input, expected", [
@@ -14,7 +14,7 @@ def test_create_different_games(db_session: Session, test_input: list[int], expe
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input:
         print(f"making game num: {i}")
-        new_game_guess_the_player(i, Session())
+        new_game_guess_the_player(i, 1, Session())
 
     actual_gtp_count = db_session.query(func.count(GuessThePlayer.chat_id)).scalar() 
     actual_game_count = db_session.query(func.count(Game.chat_id)).scalar() 
@@ -35,7 +35,7 @@ def test_create_different_games_some_the_same(db_session: Session, test_input: l
     print("\n=====================\n", "test_create_different_games_some_the_same\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input:
-        new_game_guess_the_player(i, Session())
+        new_game_guess_the_player(i, 1, Session())
 
     actual_gtp_count = db_session.query(func.count(GuessThePlayer.chat_id)).scalar() 
     actual_game_count = db_session.query(func.count(Game.chat_id)).scalar() 
@@ -56,7 +56,7 @@ def test_create_different_games_cancel_some(db_session: Session, test_input: lis
     print("\n=====================\n", "test_create_different_games_cancel_some\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input:
-        new_game_guess_the_player(i, Session())
+        new_game_guess_the_player(i, 1, Session())
 
     for game in test_input[::-1][:len(test_input) // 2]:
         cancel_game_guess_the_player(game, Session())
@@ -80,7 +80,7 @@ def test_join_game_after_cancling(db_session: Session, test_input: list[int], ex
     print("\n=====================\n", "test_join_game_after_cancling\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input:
-        new_game_guess_the_player(i, Session())
+        new_game_guess_the_player(i, 1, Session())
 
     canceld_games = [id for i, id in enumerate(test_input) if i % 2 == 0]
 
@@ -116,7 +116,7 @@ def test_start_game_same_players(db_session: Session, test_input: dict[str, list
     print("\n=====================\n", "test_start_game_same_players\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input["games"]:
-        new_game_guess_the_player(i, Session())
+        new_game_guess_the_player(i, 1, Session())
 
     canceld_games = test_input["canceld"]
     less_that_expected_player = test_input["less_that_expected_player"]

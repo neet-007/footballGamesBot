@@ -2,6 +2,7 @@ import logging
 from random import randint
 from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from db.models import Draft, DraftPlayer, DraftPlayerTeam, DraftVote, DraftVotePlayer, Game, Team, draft_team_association
 
 logger = logging.getLogger(__name__)
@@ -152,16 +153,15 @@ def set_game_states_draft(chat_id:int, player_id:int, category:str, teams:list[s
                 return False, "player not in game", draft_details[1], "", "", "", 0
 
             teams = [team.lower().strip() for team in teams]
+            teams_add = [{"name":team} for team in teams]
 
-            existing_teams = [team for team in session.query(Team).all()]
-            existing_teams_names = [team.name for team in existing_teams]
+            stmt = sqlite_insert(Team).values(teams_add)
+            stmt = stmt.on_conflict_do_nothing(index_elements=['name']) 
 
-            teams_to_add = [Team(name=team) for team in teams if team not in existing_teams_names]
-            
-            session.add_all(teams_to_add)
+            session.execute(stmt) 
             session.flush()  
             
-            all_teams = existing_teams + teams_to_add
+            all_teams = session.query(Team.id).filter(Team.name.in_(teams)).all()
 
             draft_teams = [{
                 "team_id": team.id,
