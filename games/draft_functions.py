@@ -1,4 +1,5 @@
 import logging
+import traceback
 from random import randint
 from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.orm import Session
@@ -63,6 +64,7 @@ def new_game_draft(chat_id: int, session:Session):
             return True, ""
     except Exception as e:
         print(f"An error occurred: {e}")
+        traceback.print_exc()
         return False, "exception"
 
 def join_game_draft(chat_id: int, player_id: int, session:Session):

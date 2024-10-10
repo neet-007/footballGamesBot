@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import func  
 from db.models import Draft, Game
-from games.draft_functions import cancel_game_draft, join_game_draft, new_game_draft, start_game_draft
+from games.draft_functions import cancel_game_draft, join_game_draft, leave_game_draft, new_game_draft, start_game_draft
 from .conftest import new_db, drop_db
 
 @pytest.mark.parametrize("test_input, expected", [
@@ -161,4 +161,78 @@ def test_start_game_same_players(db_session: Session, test_input: dict[str, list
     assert actual_game_count == expected
     drop_db()
     print("=====================\n")
+
+@pytest.mark.parametrize("test_input, expected", [
+    ({
+        "games":[11, 22, 33, 44],
+        "players":[111, 222, 333, 444],
+        "canceld":[22, 44],
+        "less_that_expected_player":[33],
+    }, 1),
+])
+def test_leave_game_before_start_same_players_less_than_2(db_session: Session, test_input: dict[str, list[int]], expected: int):
+    new_db()
+    print("\n=====================\n", "test_start_game_same_players\n", sep="")
+    Session = sessionmaker(bind=db_session.bind)
+    for i in test_input["games"]:
+        new_game_draft(i, Session())
+
+    canceld_games = test_input["canceld"]
+    less_that_expected_player = test_input["less_that_expected_player"]
+
+    for game in canceld_games:
+        cancel_game_draft(game, Session())
+
+    for game in test_input["games"]:
+        if game in less_that_expected_player:
+            res, err = join_game_draft(game, test_input["players"][0], Session())
+            assert res is True
+            assert err == ""
+        else:   
+            for player in test_input["players"]:
+                res, err = join_game_draft(game, player, Session())
+                if game in canceld_games:
+                    assert res is False
+                    assert err == "no game"
+                else:
+                    assert res is True
+                    assert err == ""
+                
+    for game in test_input["games"]:
+        for player in test_input["players"]:
+            res, err, formation, curr_pos, team_name, next_player, non_picked_teams, teams = leave_game_draft(game, player, Session())
+
+            print("\n=====================\n", res, err, curr_pos, team_name, next_player, non_picked_teams, teams, sep="")
+    
+            if game in canceld_games:
+                assert res is False
+                assert err == "no game found"
+                assert formation == ""
+                assert curr_pos == ""
+                assert team_name == ""
+                assert next_player == 0
+                assert non_picked_teams == []
+                assert teams == []
+            elif game in less_that_expected_player and player != test_input["players"][0]:
+                assert res is False
+                assert err == "player not in game"
+                assert formation == ""
+                assert curr_pos == ""
+                assert team_name == ""
+                assert next_player == 0
+                assert non_picked_teams == []
+                assert teams == []
+            else:
+                assert res is True
+                assert err == ""
+                assert formation == ""
+                assert curr_pos == ""
+                assert team_name == ""
+                assert next_player == 0
+                assert non_picked_teams == []
+                assert teams == []
+
+    drop_db()
+    print("=====================\n")
+
 

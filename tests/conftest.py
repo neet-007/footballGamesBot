@@ -25,8 +25,9 @@ def get_session() -> Session:
     SessionFactory = sessionmaker(bind=engine)
     return SessionFactory()
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def db_session():
+    new_db()
     session = get_session()   
     try:
         yield session  
@@ -38,3 +39,4 @@ def db_session():
             print("\n===================================\n", "session is active", "\n===================================\n")
 
         session.close()
+        drop_db()

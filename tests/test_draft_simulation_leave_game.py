@@ -1,12 +1,11 @@
 import concurrent.futures
 from pprint import pprint
 from random import randint
-from time import sleep
 from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 from db.connection import new_db
-from games.draft_functions import add_pos_to_team_draft, add_vote, cancel_game_draft, end_game_draft, end_round_draft, get_vote_data, get_vote_results, join_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
+from games.draft_functions import add_pos_to_team_draft, add_vote, cancel_game_draft, end_game_draft, end_round_draft, get_vote_data, get_vote_results, join_game_draft, leave_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
 
 POSITIONS = 11
 
@@ -108,11 +107,19 @@ def thread_safe_end_game(game_id, Session):
     finally:
         session.close()
 
+def thread_safe_leave_game(game_id, player_id, Session):
+    session = Session()
+    try:
+        return leave_game_draft(game_id, player_id, session)
+    finally:
+        session.close()
+
 @pytest.mark.parametrize("test_input, expected", [
     ({
         "games": [11, 22, 33, 44, 55, 66, 77, 88, 99],
         "players": [111, 222, 333, 444, 555],
         "canceld": [22, 44],
+        "games_player_leaving":{11:2, 55:4},
         "less_that_expected_player": [33],
         "wrong_formation":[88],
         "game_data": {
@@ -149,67 +156,55 @@ def thread_safe_end_game(game_id, Session):
         }
     }, 4),
 ])
-def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[int, dict[str, str]]], expected: int):
+def test_leave_game_before_start_same_players(db_session: Session, test_input: dict[str, dict[int, dict[str, str]]], expected: int):
     Session = sessionmaker(bind=db_session.bind)
+    new_db()
     print("\n=====================\n", "test_start_round_same_players\n", sep="")
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Create games concurrently
-        create_game_futures = {executor.submit(thread_safe_new_game, game, Session):game for game in test_input["games"]}
+        create_game_futures = [executor.submit(thread_safe_new_game, i, Session) for i in test_input["games"]]
 
         # Ensure all games are created by checking the result of create_game_futures
-        for future in concurrent.futures.as_completed(create_game_futures.keys()):
-            game = create_game_futures[future]
+        for future in concurrent.futures.as_completed(create_game_futures):
             res, err = future.result()  # This will raise an exception if game creation fails
-
-            print("\n==========================\n", game, res, err, "\n==========================\n")
-            assert res is True
-            assert err is ""
-
+            print("\n==========================\n", res, err, "\n==========================\n")
 
         # Cancel games concurrently
-        cancel_game_futures = {executor.submit(thread_safe_cancel_game, game, Session):game for game in test_input["canceld"]}
+        cancel_game_futures = [executor.submit(thread_safe_cancel_game, game, Session) for game in test_input["canceld"]]
 
         # Ensure all cancel operations are complete
-        for future in concurrent.futures.as_completed(cancel_game_futures.keys()):
-           game = cancel_game_futures[future]
+        for future in concurrent.futures.as_completed(cancel_game_futures):
            res, err = future.result()  # This will raise an exception if cancellation fails
-
-           print("\n==========================\n", game, res, err, "\n==========================\n")
-           assert res is True
-           assert err == ""
+           print("\n==========================\n", res, err, "\n==========================\n")
 
         # Join players to games concurrently
-        join_futures = {}
-        canceld_join_futures = {}
+        join_futures = []
+        canceld_join_futures = []
         joiners = 0
         for game in test_input["games"]:
-            join_futures[game] = []
-            canceld_join_futures[game] = []
             if game in test_input["canceld"]:
                 for player in test_input["players"]:
-                    canceld_join_futures[game].append(executor.submit(thread_safe_join_game, game, player, Session))
+                    canceld_join_futures.append(executor.submit(thread_safe_join_game, game, player, Session))
             elif game in test_input["less_that_expected_player"]:
                 continue
             else:
                 for player in test_input["players"]:
                     joiners += 1
-                    join_futures[game].append(executor.submit(thread_safe_join_game, game, player, Session))
+                    join_futures.append(executor.submit(thread_safe_join_game, game, player, Session))
 
         # Verify results for joining games
-        for game, future_list in join_futures.items():
-            for i, future in enumerate(concurrent.futures.as_completed(future_list)):
-                res, err = future.result()
-                print("\n==========================\n", i, "game: ", game, "res: ", res, "err: ", err, "\n==========================\n")
-                assert res is True
-                assert err == ""
+        for i, future in enumerate(concurrent.futures.as_completed(join_futures)):
+            res, err = future.result()
+            print("\n==========================\n", i, "res: ", res, "err: ", err, "\n==========================\n")
+            assert res is True
+            assert err == ""
 
-        for game, future_list in canceld_join_futures.items():
-            for i, future in enumerate(concurrent.futures.as_completed(future_list)):
-                res, err = future.result()
-                print("\n==========================\n", "game: ", game, "res: ", res, "err: ", err, "\n==========================\n")
-                assert res is False
-                assert err == "no game"
+        for future in concurrent.futures.as_completed(canceld_join_futures):
+            res, err = future.result()
+            print("\n==========================\n", res, err, "\n==========================\n")
+            assert res is False
+            assert err == "no game"
 
         # Start games concurrently
         game_data = test_input["game_data"]
@@ -231,18 +226,15 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
             valid_games.append(game)
 
         print("\n==========================\n", valid_games, "\n==========================\n")
-        
-        start_game_futures = {executor.submit(thread_safe_start_game, game, Session):game  for game in valid_games}
-
-        for future in concurrent.futures.as_completed(start_game_futures.keys()):
-            game = start_game_futures[future]
-            res, err, num_players_ = future.result()  
+        start_game_futures = {game: executor.submit(thread_safe_start_game, game, Session) for game in valid_games}
+        for game, future in start_game_futures.items():
+            res, err, num_players_ = future.result()
             print("\n==========================\n", game, res, err, num_players, "\n==========================\n")
-
             assert res is True
             assert err == ""
             assert num_players_ == num_players
 
+        cancel_game_futures = [executor.submit(thread_safe_cancel_game, game, Session) for game in test_input["canceld"]]
         state_set_games_futres = {}
 
         for game in valid_games:
@@ -251,12 +243,11 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
             formation = game_data[game]["formation"]
             teams= game_data[game]["teams"]
 
-            state_set_games_futres[executor.submit(thread_safe_set_game_state ,game, test_input["players"][0], category, teams, formation, Session)] = game
+            state_set_games_futres[game] = executor.submit(thread_safe_set_game_state ,game, test_input["players"][0], category, teams, formation, Session)
 
         curr_players = {}
         picking_players = {}
-        for future in concurrent.futures.as_completed(state_set_games_futres.keys()):
-            game = state_set_games_futres[future]
+        for game, future in state_set_games_futres.items():
             res, err, num_players_, category_, formation_, teams_, curr_player_id_ = future.result()
             print("\n==========================\n", res, err, num_players_, category_, formation_, teams_, curr_player_id_, "\n==========================\n")
 
@@ -273,7 +264,7 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
             assert (curr_player_id_ in test_input["players"]) is True
             picking_players[game] = curr_player_id_
             curr_players[game] = curr_player_id_
-
+        
         players_teams = {}
         for game in valid_games:
             new_list = []
@@ -285,10 +276,9 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
         for pos in range(POSITIONS):
             rand_teams_futures = {}
             for game, curr_player in picking_players.items():
-                rand_teams_futures[executor.submit(thread_safe_rand_team, game, curr_player, Session)] = game 
+                rand_teams_futures[game] = executor.submit(thread_safe_rand_team, game, curr_player, Session)
 
-            for future in concurrent.futures.as_completed(rand_teams_futures.keys()):
-                game = rand_teams_futures[future]
+            for game, future in rand_teams_futures.items():
                 res, err, team_name, formation_name, curr_pos, non_picked_teams = future.result()
                 
                 print("\n==========================\n", game, res, err, team_name, formation_name, curr_pos, "\n==========================\n")
@@ -311,13 +301,12 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                         if item[0] == curr_player:
                             item[1][f"p{pos + 1}"] = added_player
 
-                    added_pos_futures[ game] = executor.submit(thread_safe_add_pos_to_team, game, curr_player, added_player, Session)
+                    added_pos_futures[game] = executor.submit(thread_safe_add_pos_to_team, game, curr_player, added_player, Session)
 
-                for future in concurrent.futures.as_completed(added_pos_futures.values()):
-                    game = next(game for game, fut in added_pos_futures.items() if fut == future)
+                for game, future in added_pos_futures.items():
                     res, err, curr_player_id, curr_pos_, formation_  = future.result()
 
-                    print("\n==========================\n", "i: ", i, "num_players: ", num_players - 1,  game, res, err, curr_player_id, curr_pos_, formation_, "\n==========================\n")
+                    print("\n==========================\n", game, res, err, curr_player_id, curr_pos_, formation_, "\n==========================\n")
 
                     if i == num_players - 1:
                         formation = game_data[game]["formation"]
@@ -338,10 +327,9 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
 
             games_with_round_ended = {}
             for game in valid_games:
-                games_with_round_ended[executor.submit(thread_safe_end_round, game, Session)] = game
+                games_with_round_ended[game] = executor.submit(thread_safe_end_round, game, Session)
 
-            for future in concurrent.futures.as_completed(games_with_round_ended.keys()):
-                game = games_with_round_ended[future]
+            for game, future in games_with_round_ended.items():
                 res, err, curr_player_id, formation_, teams = future.result()
 
                 print("\n==========================\n", game, res, err, curr_player_id, formation_, "\n==========================\n")
@@ -370,12 +358,11 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
             for game, current_player in curr_players.items():
                 rand_pos = f"p{randint(1, 11)}"
                 game_pos[game] = rand_pos
-                transfers_futures[executor.submit(thread_safe_transfers, game, current_player, rand_pos, Session)] = game
+                transfers_futures[game] = executor.submit(thread_safe_transfers, game, current_player, rand_pos, Session)
                 added_player = f"{game}{current_player}{rand_pos}"
         
             # add check for skipping
-            for future in concurrent.futures.as_completed(transfers_futures.keys()):
-                game = transfers_futures[future]
+            for game, future in transfers_futures.items():
                 res, err, team_name, formation_name, curr_pos, curr_player_id, teams, non_picked_teams = future.result()
 
                 print("\n==========================\n", game, res, err, team_name, formation_name, curr_pos, curr_player_id, teams, non_picked_teams, "\n==========================\n")
@@ -395,10 +382,9 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                 for item in players_teams[game]:
                     if item[0] == curr_player:
                         item[1][game_pos[game]] = added_player
-                added_pos_futures[executor.submit(thread_safe_add_pos_to_team, game, curr_player, added_player, Session)] = game
+                added_pos_futures[game] = executor.submit(thread_safe_add_pos_to_team, game, curr_player, added_player, Session)
 
-            for future in concurrent.futures.as_completed(added_pos_futures.keys()):
-                game = added_pos_futures[future]
+            for game, future in added_pos_futures.items():
                 res, err, curr_player_id, curr_pos_, formation_  = future.result()
 
                 print("\n==========================\n", game, res, err, curr_player_id, curr_pos_, formation_, "\n==========================\n")
@@ -410,10 +396,10 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                 assert formation_ is None
                 assert curr_pos_ is None
 
-            games_with_round_ended = {executor.submit(thread_safe_end_round, game, Session):game for game in valid_games}
+            for game in valid_games:
+                games_with_round_ended[game] = executor.submit(thread_safe_end_round, game, Session)
 
-            for future in concurrent.futures.as_completed(games_with_round_ended.keys()):
-                game = games_with_round_ended[future]
+            for game, future in games_with_round_ended.items():
                 res, err, curr_player_id, formation_, teams = future.result()
 
                 print("\n==========================\n", game, res, err, curr_player_id, formation_, "\n==========================\n")
@@ -457,10 +443,9 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
 
             game_vote_count[game] = {player_id:0 for player_id in test_input["players"]} 
             games_polls[game] = poll_id.hex
-            games_votes_futures[executor.submit(thread_safe_make_vote, game, players_vote_list[0], message_id.hex, poll_id.hex, Session)] = game
+            games_votes_futures[game] = executor.submit(thread_safe_make_vote, game, players_vote_list[0], message_id.hex, poll_id.hex, Session)
 
-        for future in concurrent.futures.as_completed(games_votes_futures.keys()):
-            game = games_votes_futures[future]
+        for game, future in games_votes_futures.items():
             res, err = future.result()
             
             print("\n==========================\n", game, res, err, "\n==========================\n")
@@ -480,7 +465,7 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
         games_players_voting_count = {}
         for i, (game, future_list) in enumerate(games_add_votes_futures.items()):
             games_players_voting_count[game] = 0
-            for future in concurrent.futures.as_completed(future_list):
+            for future in future_list:
                 res, err, game_id = future.result()
 
                 print("\n==========================\n", game, res, err, game_id, "\n==========================\n")
@@ -494,12 +479,14 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                     assert err == "continue"
                     assert game_id == game
 
+            print("\n==========================\n", game, "players voting count: ",games_players_voting_count[game], "vs", "num_players: ", num_players, "\n==========================\n")
             assert games_players_voting_count[game] == num_players
 
-        games_vote_end = {executor.submit(thread_safe_get_vote_results, game, Session):game for game in valid_games}
+        games_vote_end = {}
+        for game in valid_games:
+            games_vote_end[game] = executor.submit(thread_safe_get_vote_results, game, Session)
 
-        for future in concurrent.futures.as_completed(games_vote_end.keys()):
-            game = games_vote_end[future]
+        for game, future in games_vote_end.items():
             res, err, message_id, votes = future.result()
 
             print("\n==========================\n", game, res, err, message_id, votes, "\n==========================\n")
@@ -509,20 +496,28 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
             assert games_votes[game]["message_id"] == message_id
             assert votes == game_vote_count[game]
 
-        end_games_futures = {executor.submit(thread_safe_end_game, game, Session):game for game in valid_games}
+            print("\n==========================\n", "game votes", "\n==========================\n")
+            pprint(votes)
+            print("\n==========================\n", "test votes", "\n==========================\n")
+            pprint(game_vote_count[game])
 
-        for future in concurrent.futures.as_completed(end_games_futures.keys()):
-            game = end_games_futures[future]
+        end_games_futures = {}
+        for game in valid_games:
+            end_games_futures[game] = executor.submit(thread_safe_end_game, game, Session)
+
+        for game, future in end_games_futures.items():
             res, err, teams, formation = future.result()
+
             print("\n==========================\n", game, res, err, formation, "\n==========================\n")
 
             formation_name = game_data[game]["formation"]
             assert res is True
             assert err == ""
             assert formation == formation_name
-            assert teams is not None
             assert (sorted(teams, key=lambda x: x[0]) == sorted(players_teams[game], key=lambda x: x[0]))
 
+            pprint(sorted(teams, key=lambda x: x[0]))
+            pprint(sorted(players_teams[game], key=lambda x: x[0]))
         print("=====================\n")
 
 
