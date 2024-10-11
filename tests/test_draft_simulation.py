@@ -161,32 +161,27 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
     print("\n=====================\n", "test_start_round_same_players\n", sep="")
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Create games concurrently
         create_game_futures = {executor.submit(create_game_with_retry, game, Session):game for game in test_input["games"]}
 
-        # Ensure all games are created by checking the result of create_game_futures
         for future in concurrent.futures.as_completed(create_game_futures.keys()):
             game = create_game_futures[future]
-            res, err = future.result()  # This will raise an exception if game creation fails
+            res, err = future.result()  
 
             print("\n==========================\n", game, res, err, "\n==========================\n")
             assert res is True
             assert err is ""
 
 
-        # Cancel games concurrently
         cancel_game_futures = {executor.submit(thread_safe_cancel_game, game, Session):game for game in test_input["canceld"]}
 
-        # Ensure all cancel operations are complete
         for future in concurrent.futures.as_completed(cancel_game_futures.keys()):
            game = cancel_game_futures[future]
-           res, err = future.result()  # This will raise an exception if cancellation fails
+           res, err = future.result()  
 
            print("\n==========================\n", game, res, err, "\n==========================\n")
            assert res is True
            assert err == ""
 
-        # Join players to games concurrently
         join_futures = {}
         canceld_join_futures = {}
         joiners = 0
@@ -203,7 +198,6 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                     joiners += 1
                     join_futures[game].append(executor.submit(thread_safe_join_game, game, player, Session))
 
-        # Verify results for joining games
         for game, future_list in join_futures.items():
             for i, future in enumerate(concurrent.futures.as_completed(future_list)):
                 res, err = future.result()
@@ -218,7 +212,6 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                 assert res is False
                 assert err == "no game"
 
-        # Start games concurrently
         game_data = test_input["game_data"]
         num_players = len(test_input["players"])
 
@@ -253,7 +246,6 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
         state_set_games_futres = {}
 
         for game in valid_games:
-            #sleep(LEAN_SLEEP_TIME)
             category = game_data[game]["category"]
             formation = game_data[game]["formation"]
             teams= game_data[game]["teams"]
@@ -307,8 +299,9 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                 assert (team_name in teams) is True
                 assert formation_name == formation
                 assert curr_pos == f"p{pos + 1}"
-                #also assert what the teams are
-                assert len(non_picked_teams) == (num_players + 11) - pos - 1
+                assert sorted([team.lower() for team in non_picked_teams]) == sorted([team.lower() for team in teams if team.lower() != team_name.lower()])
+
+                game_data[game]["teams"].remove(team_name)
 
             added_pos_futures = {}
             for i in range(num_players):
@@ -394,8 +387,10 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
                 assert curr_pos == game_pos[game]
                 assert (team_name in teams) is True
                 assert formation_name == formation
-                #also check what the teams are
-                assert len(non_picked_teams) == num_players - (i + 1)
+                assert sorted([team.lower() for team in non_picked_teams]) == sorted([team.lower() for team in teams if team.lower() != team_name.lower()])
+
+                game_data[game]["teams"].remove(team_name)
+
 
             for game, curr_player in curr_players.items():
                 added_player = f"{game}{curr_player}transfer"
