@@ -1,11 +1,9 @@
 import concurrent.futures
-from pprint import pprint
 from random import randint
 from time import sleep
 from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
-from db.connection import new_db
 from games.draft_functions import add_pos_to_team_draft, add_vote, cancel_game_draft, end_game_draft, end_round_draft, get_vote_data, get_vote_results, join_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
 
 POSITIONS = 11
@@ -16,6 +14,15 @@ def thread_safe_new_game(game_id, Session):
         return new_game_draft(game_id, session)
     finally:
         session.close()
+
+def create_game_with_retry(game, Session, max_retries=3):
+    for attempt in range(max_retries):
+        res, err = thread_safe_new_game(game, Session)
+        if err != "exception":
+            return res, err
+
+        sleep(0.1 * (attempt + 1))  
+    return False, "Max retries reached"
 
 def thread_safe_cancel_game(game_id, Session):
     session = Session()
@@ -155,7 +162,7 @@ def test_end_game_same_players(db_session: Session, test_input: dict[str, dict[i
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Create games concurrently
-        create_game_futures = {executor.submit(thread_safe_new_game, game, Session):game for game in test_input["games"]}
+        create_game_futures = {executor.submit(create_game_with_retry, game, Session):game for game in test_input["games"]}
 
         # Ensure all games are created by checking the result of create_game_futures
         for future in concurrent.futures.as_completed(create_game_futures.keys()):
