@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session, sessionmaker
 from games.draft_functions import add_pos_to_team_draft, add_vote, cancel_game_draft, end_game_draft, end_round_draft, get_vote_data, get_vote_results, join_game_draft, leave_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
+from tests.conftest import LEAN_SLEEP_TIME
 
 POSITIONS = 11
 LEAST_NUM_PLAYERS = 2
@@ -165,7 +166,7 @@ def thread_safe_leave_game(game_id, player_id, Session):
         }
     }, 4),
 ])
-def test_leave_game_before_start_same_players(db_session: Session, test_input: dict[str, dict[int, dict[str, str]]], expected: int):
+def test_leave_game_before_transfers_same_players(db_session: Session, test_input: dict[str, dict[int, dict[str, str]]], expected: int):
     Session = sessionmaker(bind=db_session.bind)
     print("\n=====================\n", "test_start_round_same_players\n", sep="")
 
@@ -240,31 +241,6 @@ def test_leave_game_before_start_same_players(db_session: Session, test_input: d
             valid_games.append(game)
 
         print("\n==========================\n", valid_games, "\n==========================\n")
-        games_canceld_with_leaving = [game for game in valid_games if randint(0, 2) == 2]
-        
-        games_leaving_futures = {}
-        valid_players_after_leaving = [player_id for i, player_id in enumerate(test_input["players"]) if i <= LEAST_NUM_PLAYERS]
-        for game in valid_games:
-            game_data[game]["teams"] = game_data[game]["teams"][0:11 + len(valid_players_after_leaving)]
-
-        for game in valid_games:
-            if game in games_canceld_with_leaving:
-                games_leaving_futures[game] = [executor.submit(thread_safe_leave_game, game, player_id, Session) for player_id in test_input["players"]]
-            else:
-                games_leaving_futures[game] = [executor.submit(thread_safe_leave_game, game, player_id, Session) for player_id in test_input["players"] if player_id not in valid_players_after_leaving]
-
-        for game, future_list in games_leaving_futures.items():
-            for future in concurrent.futures.as_completed(future_list):
-                res, err, formation_name, curr_pos, team_name, next_player_id, non_picked_teams, _ = future.result()
-
-                assert res is True
-                assert err == ""
-                assert formation_name == ""
-                assert curr_pos == ""
-                assert team_name == ""
-                assert next_player_id == 0
-                assert non_picked_teams == []
-                print("\n==========================\n", game, res, err, formation_name, curr_pos, team_name, next_player_id, non_picked_teams, "\n==========================\n")
 
         start_game_futures = {executor.submit(thread_safe_start_game, game, Session):game  for game in valid_games}
 
@@ -273,15 +249,76 @@ def test_leave_game_before_start_same_players(db_session: Session, test_input: d
             res, err, num_players_ = future.result()  
             print("\n==========================\n", game, res, err, num_players, "\n==========================\n")
 
-            if game in games_canceld_with_leaving:
-                assert res is False
-                assert err == "no players associated with the game"
-                valid_games.remove(game)
-            else:
-                assert res is True
-                assert err == ""
-                assert num_players_ == len(valid_players_after_leaving)
+            assert res is True
+            assert err == ""
+            assert num_players_ == num_players
 
+        games_canceld_with_leaving = [game for i, game in enumerate(valid_games) if i == 2]
+        
+        games_leaving_futures = {}
+        valid_players_after_leaving = [player_id for i, player_id in enumerate(test_input["players"]) if i <= LEAST_NUM_PLAYERS]
+        for game in valid_games:
+            game_data[game]["teams"] = game_data[game]["teams"][0:11 + len(valid_players_after_leaving)]
+
+        for game in valid_games:
+            if game in games_canceld_with_leaving:
+                games_leaving_futures[game] = []
+                for player_id in test_input["players"]:
+                    games_leaving_futures[game].append(executor.submit(thread_safe_leave_game, game, player_id, Session))
+                    sleep(LEAN_SLEEP_TIME)  
+            else:
+                games_leaving_futures[game] = []
+                for player_id in test_input["players"]:
+                    if player_id not in valid_players_after_leaving:
+                        games_leaving_futures[game].append(executor.submit(thread_safe_leave_game, game, player_id, Session))
+                        sleep(LEAN_SLEEP_TIME) 
+
+        games_canceld = []
+        for game, future_list in games_leaving_futures.items():
+            players_got_canceld = 0
+            for future in concurrent.futures.as_completed(future_list):
+                res, err, formation_name, curr_pos, team_name, next_player_id, non_picked_teams, _ = future.result()
+
+                print("\n==========================\n", game, res, err, formation_name, curr_pos, team_name, next_player_id, non_picked_teams, "\n==========================\n")
+                if game in games_canceld_with_leaving:
+                    if err == "":
+                        assert res is True
+                        assert formation_name == ""
+                        assert curr_pos == ""
+                        assert team_name == ""
+                        assert next_player_id == 0
+                        assert non_picked_teams == []
+                    elif err == "game canceld":
+                        players_got_canceld += 1
+                        assert res is True
+                        assert formation_name == ""
+                        assert curr_pos == ""
+                        assert team_name == ""
+                        assert next_player_id == 0
+                        assert non_picked_teams == []
+                        assert players_got_canceld == 1
+                        print("\n==========================\n", "game_canceld: ", game, "\n==========================\n")
+                        games_canceld.append(game)
+                        valid_games.remove(game)
+                    elif err == "no game found":
+                        assert res is False
+                        assert formation_name == ""
+                        assert curr_pos == ""
+                        assert team_name == ""
+                        assert next_player_id == 0
+                        assert non_picked_teams == []
+                    else:
+                        assert True is False
+                else:
+                    assert res is True
+                    assert err == ""
+                    assert formation_name == ""
+                    assert curr_pos == ""
+                    assert team_name == ""
+                    assert next_player_id == 0
+                    assert non_picked_teams == []
+
+        assert sorted(games_canceld) == sorted(games_canceld_with_leaving)
         state_set_games_futres = {}
 
         for game in valid_games:

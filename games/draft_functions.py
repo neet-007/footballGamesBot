@@ -803,6 +803,7 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                 )
 
                 session.delete(player)
+                draft.num_players -= 1
                 if not next_player:
                     return True, "end game", draft.formation_name, "", "", 0, [], []
 
@@ -826,6 +827,7 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                     .first()
                 )
 
+                draft.num_players -= 1
                 session.delete(player)
                 if not next_player:
                     session.query(DraftPlayer).filter(DraftPlayer.draft_id == chat_id).update({DraftPlayer.picking: False})
@@ -854,6 +856,7 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                     .first()
                 )
 
+                draft.num_players -= 1
                 session.delete(player)
                 if not next_player:
                     return True, "end round", "", "", "", 0, [], []
@@ -870,6 +873,8 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                 ).fetchall()
                 return True, "new current player", draft.formation_name, draft.curr_pos, team[0], next_player[1], non_picked_teams, []
 
+            draft.num_players -= 1
+            session.delete(player)
             return True, "", "", "", "", 0, [], []
     except Exception as e:
         print(f"An error occurred: {e}")
