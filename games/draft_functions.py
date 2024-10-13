@@ -844,6 +844,8 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                     if not next_player:
                         return False, "game error", "", "", "", 0, [], []
     
+                draft.picking_player_id = next_player[0]
+                draft.current_player_id = next_player[0]
                 return True, "new picking player", draft.formation_name, draft.curr_pos, "", next_player[1] , [], []
 
             if draft.state == 3 and draft.current_player_id == player.id:
@@ -861,6 +863,7 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                 if not next_player:
                     return True, "end round", "", "", "", 0, [], []
 
+                draft.current_player_id = next_player[0]
                 team = session.query(Team.name).filter(Team.id == draft.curr_team_id).first() 
                 if not team:
                     return False, "game error", "", "", "", 0, [], []
