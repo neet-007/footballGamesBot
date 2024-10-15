@@ -791,7 +791,7 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                 return True, "game end", draft.formation_name, "", "", 0, [], teams
 
             # the above is mostly complete the bottom is not
-            if draft.state == 4:
+            if draft.state == 4 and (draft.picking_player_id == player.id or draft.current_player_id == player.id):
                 next_player = (
                     session.query(DraftPlayer.id, DraftPlayer.player_id)
                     .filter(DraftPlayer.draft_id == chat_id,
@@ -808,14 +808,14 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                     return True, "end game", draft.formation_name, "", "", 0, [], []
 
                 non_picked_teams = session.execute(
-                    select(Team.id, Team.name)
+                    select(Team.name)
                     .join(draft_team_association, Team.id == draft_team_association.c.team_id)
                     .where(draft_team_association.c.picked == False,
                           draft_team_association.c.draft_id == chat_id)
                 ).fetchall()
                 draft.picking_player_id = next_player[0]
                 draft.current_player_id = next_player[0]
-                return True, "new transfer player", draft.formation_name, draft.curr_pos, "", next_player[1], non_picked_teams, []
+                return True, "new transfer player", draft.formation_name, draft.curr_pos, "", next_player[1], [team[0] for team in non_picked_teams], []
 
             if draft.state == 2 and draft.picking_player_id == player.id:
                 next_player = (
@@ -869,12 +869,12 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
                     return False, "game error", "", "", "", 0, [], []
 
                 non_picked_teams = session.execute(
-                    select(Team.id, Team.name)
+                    select(Team.name)
                     .join(draft_team_association, Team.id == draft_team_association.c.team_id)
                     .where(draft_team_association.c.picked == False,
                           draft_team_association.c.draft_id == chat_id)
                 ).fetchall()
-                return True, "new current player", draft.formation_name, draft.curr_pos, team[0], next_player[1], non_picked_teams, []
+                return True, "new current player", draft.formation_name, draft.curr_pos, team[0], next_player[1], [team[0] for team in non_picked_teams], []
 
             draft.num_players -= 1
             session.delete(player)
