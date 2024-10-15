@@ -283,11 +283,12 @@ def test_leave_game_before_picking_first_team_players(db_session: Session, test_
             assert res is True
             assert err == ""
 
-    for game in test_input["games"]:
-        for player in test_input["players"]:
+    valid_games = [game for game in test_input["games"] if (game not in canceld_games and game not in test_input["less_that_expected_player"])]
+    for game in valid_games:
+        for i, player in enumerate(test_input["players"]):
             res, err, formation, curr_pos, team_name, next_player, non_picked_teams, teams = leave_game_draft(game, player, Session())
 
-            print("\n=====================\n", res, err, curr_pos, team_name, next_player, non_picked_teams, teams, sep="")
+            print("\n=====================\n", i, game, res, err, curr_pos, team_name, next_player, non_picked_teams, teams)
     
             if game in canceld_games:
                 assert res is False
@@ -308,14 +309,33 @@ def test_leave_game_before_picking_first_team_players(db_session: Session, test_
                 assert non_picked_teams == []
                 assert teams == []
             else:
-                assert res is True
-                assert err == ""
-                assert formation == ""
-                assert curr_pos == ""
-                assert team_name == ""
-                assert next_player == 0
-                assert non_picked_teams == []
-                assert teams == []
+                if i > len(test_input["players"]) - 2:
+                    assert res is False
+                    assert err == "no game found"
+                    assert formation == ""
+                    assert curr_pos == ""
+                    assert team_name == ""
+                    assert next_player == 0
+                    assert non_picked_teams == []
+                    assert teams == []
+                elif i == len(test_input["players"]) - 2:
+                    assert res is True
+                    assert err == "game canceld"
+                    assert formation == ""
+                    assert curr_pos == ""
+                    assert team_name == ""
+                    assert next_player == 0
+                    assert non_picked_teams == []
+                    assert teams == []
+                else:
+                    assert res is True
+                    assert err == ""
+                    assert formation == ""
+                    assert curr_pos == ""
+                    assert team_name == ""
+                    assert next_player == 0
+                    assert non_picked_teams == []
+                    assert teams == []
 
     drop_db()
     print("=====================\n")
