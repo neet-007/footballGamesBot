@@ -3,13 +3,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import func  
 from db.models import Draft, Game
 from games.draft_functions import cancel_game_draft, join_game_draft, leave_game_draft, new_game_draft, start_game_draft
-from .conftest import new_db, drop_db
 
 @pytest.mark.parametrize("test_input, expected", [
     ([11, 22, 33], 3),
 ])
 def test_create_different_games(db_session: Session, test_input: list[int], expected: int):
-    new_db()
     print("\n=====================\n", "test_create_different_games\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input:
@@ -24,14 +22,12 @@ def test_create_different_games(db_session: Session, test_input: list[int], expe
 
     assert actual_draft_count == expected
     assert actual_game_count == expected
-    drop_db()
     print("=====================\n")
 
 @pytest.mark.parametrize("test_input, expected", [
     ([11, 22, 22, 11], 2),
 ])
 def test_create_different_games_some_the_same(db_session: Session, test_input: list[int], expected: int):
-    new_db()
     print("\n=====================\n", "test_create_different_games_some_the_same\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input:
@@ -45,14 +41,12 @@ def test_create_different_games_some_the_same(db_session: Session, test_input: l
 
     assert actual_draft_count == expected
     assert actual_game_count == expected
-    drop_db()
     print("=====================\n")
 
 @pytest.mark.parametrize("test_input, expected", [
     ([11, 22, 33, 44], 2),
 ])
 def test_create_different_games_cancel_some(db_session: Session, test_input: list[int], expected: int):
-    new_db()
     print("\n=====================\n", "test_create_different_games_cancel_some\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input:
@@ -69,14 +63,12 @@ def test_create_different_games_cancel_some(db_session: Session, test_input: lis
 
     assert actual_draft_count == expected
     assert actual_game_count == expected
-    drop_db()
     print("=====================\n")
 
 @pytest.mark.parametrize("test_input, expected", [
     ([11, 22, 33, 44], 2),
 ])
 def test_join_game_after_cancling(db_session: Session, test_input: list[int], expected: int):
-    new_db()
     print("\n=====================\n", "test_join_game_after_cancling\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input:
@@ -100,7 +92,6 @@ def test_join_game_after_cancling(db_session: Session, test_input: list[int], ex
 
     assert actual_draft_count== expected
     assert actual_game_count == expected
-    drop_db()
     print("=====================\n")
 
 @pytest.mark.parametrize("test_input, expected", [
@@ -112,7 +103,6 @@ def test_join_game_after_cancling(db_session: Session, test_input: list[int], ex
     }, 1),
 ])
 def test_start_game_same_players(db_session: Session, test_input: dict[str, list[int]], expected: int):
-    new_db()
     print("\n=====================\n", "test_start_game_same_players\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input["games"]:
@@ -159,7 +149,6 @@ def test_start_game_same_players(db_session: Session, test_input: dict[str, list
 
     assert actual_draft_count == expected
     assert actual_game_count == expected
-    drop_db()
     print("=====================\n")
 
 @pytest.mark.parametrize("test_input, expected", [
@@ -171,7 +160,6 @@ def test_start_game_same_players(db_session: Session, test_input: dict[str, list
     }, 1),
 ])
 def test_leave_game_before_start_same_players(db_session: Session, test_input: dict[str, list[int]], expected: int):
-    new_db()
     print("\n=====================\n", "test_start_game_same_players\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input["games"]:
@@ -232,7 +220,6 @@ def test_leave_game_before_start_same_players(db_session: Session, test_input: d
                 assert non_picked_teams == []
                 assert teams == []
 
-    drop_db()
     print("=====================\n")
 
 @pytest.mark.parametrize("test_input, expected", [
@@ -244,7 +231,6 @@ def test_leave_game_before_start_same_players(db_session: Session, test_input: d
     }, 1),
 ])
 def test_leave_game_before_picking_first_team_players(db_session: Session, test_input: dict[str, list[int]], expected: int):
-    new_db()
     print("\n=====================\n", "test_start_game_same_players\n", sep="")
     Session = sessionmaker(bind=db_session.bind)
     for i in test_input["games"]:
@@ -337,7 +323,6 @@ def test_leave_game_before_picking_first_team_players(db_session: Session, test_
                     assert non_picked_teams == []
                     assert teams == []
 
-    drop_db()
     print("=====================\n")
 
 
