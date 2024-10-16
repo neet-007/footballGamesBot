@@ -790,7 +790,7 @@ def leave_game_draft(chat_id:int, player_id:int, session:Session):
 
                 return True, "game end", draft.formation_name, "", "", 0, [], teams
 
-            # the above is mostly complete the bottom is not
+            #made the tests wnd they work fine but need to make them randomized and try to test it with players
             if draft.state == 4 and (draft.picking_player_id == player.id or draft.current_player_id == player.id):
                 next_player = (
                     session.query(DraftPlayer.id, DraftPlayer.player_id)

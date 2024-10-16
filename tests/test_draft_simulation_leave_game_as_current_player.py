@@ -822,7 +822,6 @@ def test_leave_game_as_current_player_end_round_same_players(db_session: Session
 
                     games_leaving_futures[executor.submit(thread_safe_leave_game, game, current_player_id, Session)] = game 
 
-                player_left = {}
                 for future in games_leaving_futures.keys():
                     game = games_leaving_futures[future]
                     res, err, formation_name, curr_pos, team_name, next_player_id, non_picked_teams, _ = future.result()
@@ -836,7 +835,6 @@ def test_leave_game_as_current_player_end_round_same_players(db_session: Session
                     assert curr_pos == ""
 
                     print("\n==========================\n", "curr player:", curr_players[game], "\n==========================\n")
-                    player_left[game] = curr_players[game]
                     valid_players_after_leaving[game].remove(curr_players[game])
                     del picking_players[game] 
                     del curr_players[game]
@@ -1032,7 +1030,6 @@ def test_leave_game_as_current_player_end_round_same_players(db_session: Session
         for game, poll_id in games_polls.items():
             games_add_votes_futures[game] = []
             for player_id in valid_players_after_leaving[game]:
-                # should change and be per game
                 rand_option = randint(0, len(valid_players_after_leaving[game]) - 1)
                 game_vote_count[game][players_options[game][rand_option]] += 1
                 games_add_votes_futures[game].append(executor.submit(thread_safe_add_vote, poll_id, rand_option, Session))
