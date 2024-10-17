@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from db.models import Base
 from games.draft_functions import add_pos_to_team_draft, add_vote, cancel_game_draft, end_game_draft, end_round_draft, get_vote_data, get_vote_results, join_game_draft, leave_game_draft, make_vote, new_game_draft, rand_team_draft, set_game_states_draft, start_game_draft, transfers
+from games.guess_the_player_functions import cancel_game_guess_the_player, end_game_guess_the_player, end_round_guess_the_player, join_game_guess_the_player, new_game_guess_the_player, proccess_answer_guess_the_player, start_game_guess_the_player, start_round_guess_the_player
 
 LEAN_SLEEP_TIME = 0.2
 HARSH_SLEEP_TIME = 0.1
@@ -141,6 +142,71 @@ def thread_safe_leave_game(game_id, player_id, Session):
     finally:
         session.close()
 
+
+def thread_safe_new_game_guess_the_player(game_id, rounds, Session):
+    session = Session()
+    try:
+        return new_game_guess_the_player(game_id, rounds, session)
+    finally:
+        session.close()
+
+def create_game_with_retry_guess_the_player(game, rounds, Session, max_retries=3):
+    for attempt in range(max_retries):
+        res, err = thread_safe_new_game_guess_the_player(game, rounds, Session)
+        if err != "exception":
+            return res, err
+
+        sleep(0.1 * (attempt + 1))  
+    return False, "Max retries reached"
+
+def thread_safe_cancel_game_guess_the_player(game_id, Session):
+    session = Session()
+    try:
+        return cancel_game_guess_the_player(game_id, session)
+    finally:
+        session.close()
+
+def thread_safe_join_game_guess_the_player(game_id, player_id, Session):
+    session = Session()
+    try:
+        return join_game_guess_the_player(game_id, player_id, session)
+    finally:
+        session.close()
+
+def thread_safe_start_game_guess_the_player(game_id, Session):
+    session = Session()
+    try:
+        return start_game_guess_the_player(game_id, session)
+    finally:
+        session.close()
+
+def thread_safe_start_round_guess_the_player(player, hints, answer, Session):
+    session = Session()
+    try:
+        return start_round_guess_the_player(player, hints, answer, session)
+    finally:
+        session.close()
+
+def thread_safe_proccess_answer_guess_the_player(chat, player, answer, Session):
+    session = Session()
+    try:
+        return proccess_answer_guess_the_player(chat, player, answer, session)
+    finally:
+        session.close()
+
+def thread_safe_end_round_guess_the_player(chat, Session):
+    session = Session()
+    try:
+        return end_round_guess_the_player(chat, session)
+    finally:
+        session.close()
+
+def thread_safe_end_game_guess_the_player(chat, Session):
+    session = Session()
+    try:
+        return end_game_guess_the_player(chat, session)
+    finally:
+        session.close()
 
 
 @pytest.fixture(scope="function")

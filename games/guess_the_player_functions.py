@@ -168,7 +168,7 @@ def start_round_guess_the_player(player_id:int, curr_hints:list[str], curr_answe
                 .order_by(
                     guess_the_player_guess_the_player_player_association.c.time_created.asc()
                 )
-                .with_for_update(read=True)
+                .with_for_update(nowait=True, of=guess_the_player_guess_the_player_player_association)
                 .limit(1)
             ).first()
             
